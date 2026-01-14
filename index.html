@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <title>Beam Stiffness Solver — Canvas Testbed</title>
-  <!-- Libs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
@@ -22,12 +21,12 @@
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .row + .row { margin-top:8px; }
     label { display:inline-flex; gap:6px; align-items:center; }
-    /* 👉 add this new rule */
-.row label { 
-  color:#111; 
-  font-weight:600; 
-}
-input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1px solid #bbb; background:#fff; }
+    
+    .row label { 
+      color:#111; 
+      font-weight:600; 
+    }
+    input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1px solid #bbb; background:#fff; }
     button { cursor:pointer; }
     button.primary { background:#9aa0a6; color:#111; border-color:#9aa0a6; border-radius:2px; }
 
@@ -55,16 +54,13 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
 <body>
   <h2>Beam Stiffness Solver — Canvas Testbed</h2>
 
-
 <div class="row">
-  <!-- fake label chips -->
   <button class="chip" type="button" tabindex="-1" aria-disabled="true">Segments</button>
   <input id="numSegments" type="number" min="1" max="10" value="2" />
 
   <button class="chip" type="button" tabindex="-1" aria-disabled="true">Total Length</button>
   <input id="totalLength" type="number" min="0" step="any" value="120" style="width:90px" />
 
-  <!-- action buttons (explicit type="button") -->
   <button class="primary" type="button" onclick="buildBeam()">Build Beam</button>
   <button type="button" onclick="solveBeam()">Solve</button>
   <button type="button" onclick="openSectionsCatalog()">Sections Catalog</button>
@@ -74,7 +70,6 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
   <button class="chip" type="button" tabindex="-1" aria-disabled="true">EI height scale</button>
   <input id="eiScale" type="number" step="0.01" value="1.00" style="width:70px" />
 </div>
-
 
   <div id="stage">
     <canvas id="beamCanvas" width="960" height="275"></canvas>
@@ -147,7 +142,6 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
     }
 
     function normalizeSegments(){
-      // Back-compat: migrate S -> St/Sb and q -> qL/qR; default wd/A
       for (const seg of segments){
         if (seg.St === undefined && seg.S !== undefined) seg.St = seg.S;
         if (seg.Sb === undefined && seg.S !== undefined) seg.Sb = seg.S;
@@ -163,7 +157,6 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
       }
     }
 
-    // DOF map with hinge (pin = moment release; shear still transferred)
     function buildDOFMap(){
       const n = nodes.length; const idxW = new Array(n); const thLeft = new Array(n); const thRight = new Array(n); let dof=0;
       for (let i=0;i<n;i++) idxW[i] = dof++;
@@ -246,28 +239,22 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
             <div id="secCalc" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #ddd;">
               <div id="shapeGrid" style="display:grid; grid-template-columns:repeat(3, auto); gap:6px; align-items:center;">
                 <button type="button" class="shapeBtn" data-shape="rect" title="Rectangle" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/></svg>
-                  <span>Rectangle</span>
+                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/></svg><span>Rectangle</span>
                 </button>
                 <button type="button" class="shapeBtn" data-shape="circ" title="Circle / Tube" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="28"><circle cx="14" cy="14" r="12" fill="#ddd" stroke="#666"/><circle cx="14" cy="14" r="6" fill="#fff" stroke="#666"/></svg>
-                  <span>Circle</span>
+                  <svg width="28" height="28"><circle cx="14" cy="14" r="12" fill="#ddd" stroke="#666"/><circle cx="14" cy="14" r="6" fill="#fff" stroke="#666"/></svg><span>Circle</span>
                 </button>
                 <button type="button" class="shapeBtn" data-shape="tube" title="Hollow Box" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/><rect x="7" y="6" width="14" height="8" fill="#fff" stroke="#666"/></svg>
-                  <span>Hollow Box</span>
+                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/><rect x="7" y="6" width="14" height="8" fill="#fff" stroke="#666"/></svg><span>Hollow Box</span>
                 </button>
                 <button type="button" class="shapeBtn" data-shape="ibeam" title="I-Beam" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="8" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="28" height="4" fill="#ddd" stroke="#666"/></svg>
-                  <span>I-Beam</span>
+                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="8" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="28" height="4" fill="#ddd" stroke="#666"/></svg><span>I-Beam</span>
                 </button>
                 <button type="button" class="shapeBtn" data-shape="channel" title="Channel" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="6" height="16" fill="#ddd" stroke="#666"/><rect x="2" y="2" width="22" height="4" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="22" height="4" fill="#ddd" stroke="#666"/></svg>
-                  <span>Channel</span>
+                  <svg width="32" height="20"><rect x="2" y="2" width="6" height="16" fill="#ddd" stroke="#666"/><rect x="2" y="2" width="22" height="4" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="22" height="4" fill="#ddd" stroke="#666"/></svg><span>Channel</span>
                 </button>
                 <button type="button" class="shapeBtn" data-shape="tbeam" title="T-Beam" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="12" fill="#ddd" stroke="#666"/></svg>
-                  <span>T-Beam</span>
+                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="12" fill="#ddd" stroke="#666"/></svg><span>T-Beam</span>
                 </button>
               </div>
               <div id="secInputs" style="margin-top:8px; font-size:12px;"></div>
@@ -554,7 +541,7 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
         const tipY = up ? (baseY - len) : (baseY + len);
         ctx.beginPath(); ctx.moveTo(xi, baseY); ctx.lineTo(xi, tipY); ctx.stroke();
         ctx.beginPath(); if (up){ ctx.moveTo(xi-6, tipY+8); ctx.lineTo(xi, tipY); ctx.lineTo(xi+6, tipY+8); }
-                         else  { ctx.moveTo(xi-6, tipY-8); ctx.lineTo(xi, tipY); ctx.lineTo(xi+6, tipY-8); }
+                                 else  { ctx.moveTo(xi-6, tipY-8); ctx.lineTo(xi, tipY); ctx.lineTo(xi+6, tipY-8); }
         ctx.stroke();
       }
       ctx.restore();
@@ -876,11 +863,11 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
         const t = (N===1)? 0 : (k/(N-1)); // include endpoints
         out.push({
           name: `${r0.name}-${r1.name}-${k+1}`,
-          I:   lerp(r0.I,  r1.I,  t),
-          St:  lerp(r0.St, r1.St, t),
-          Sb:  lerp(r0.Sb, r1.Sb, t),
-          A:   safeLerp(r0.A,  r1.A,  t),
-          wd:  safeLerp(r0.wd, r1.wd, t),
+          I:    lerp(r0.I,  r1.I,  t),
+          St:   lerp(r0.St, r1.St, t),
+          Sb:   lerp(r0.Sb, r1.Sb, t),
+          A:    safeLerp(r0.A,  r1.A,  t),
+          wd:   safeLerp(r0.wd, r1.wd, t),
         });
       }
       return out;
@@ -1186,3 +1173,40 @@ input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1
       try { solveBeam(); } catch(_) {}
       drawBeam();
       plotBendingStress();
+    }
+    
+    // Simple CSV export function (since it was referenced in HTML but missing in JS)
+    function exportCSV() {
+      if(!elementForces || !segments.length) {
+         Swal.fire('No data', 'Please solve the beam first.', 'info');
+         return;
+      }
+      
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Segment,L,E,I,St,Sb,qL,qR,wd,V_start,M_start,V_end,M_end\n";
+      
+      segments.forEach(function(seg, i) {
+          const ef = elementForces[i];
+          const row = [
+              i+1,
+              seg.L, seg.E, seg.I, seg.St, seg.Sb, seg.qL, seg.qR, seg.wd,
+              ef.V1, ef.M1, -ef.V2, -ef.M2
+          ].join(",");
+          csvContent += row + "\r\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "beam_analysis.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    
+    // Initialize on load
+    window.addEventListener('load', buildBeam);
+    
+  </script>
+</body>
+</html>
