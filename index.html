@@ -1,1212 +1,936 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Beam Stiffness Solver — Canvas Testbed</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-
-  <style>
-    :root {
-      --pad: 50px;
-      --beam-w: 960px;
-      --plot-h: 260px;
-      --right-gutter: 25px;
-    }
-
-    body { background:#f4f4f4; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:24px; }
-    h2 { margin:0 0 12px; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .row + .row { margin-top:8px; }
-    label { display:inline-flex; gap:6px; align-items:center; }
-    
-    .row label { 
-      color:#111; 
-      font-weight:600; 
-    }
-    input, button, select { height:30px; padding:0 10px; border-radius:6px; border:1px solid #bbb; background:#fff; }
-    button { cursor:pointer; }
-    button.primary { background:#9aa0a6; color:#111; border-color:#9aa0a6; border-radius:2px; }
-
-    #stage { max-width:100%; }
-
-    #beamCanvas, .plot {
-      display:block;
-      width:min(var(--beam-w), calc(100% - var(--right-gutter)));
-      max-width:calc(100% - var(--right-gutter));
-      background:#fff;
-      border:1px solid #ddd;
-    }
-    #beamCanvas { height:260px; }
-    .plot { height:var(--plot-h); }
-
-    @media (max-width:1100px) { :root { --right-gutter:24px; } }
-
-    .hint { font-size:12px; color:#555; }
-    .swal2-popup { font-size:12px !important; width:auto !important; min-width:260px !important; }
-    .swal2-input, .swal2-select { font-size:12px !important; width:160px !important; margin:4px !important; }
-    .swal2-html-container label { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-    .swal2-html-container label span { margin-right:8px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Story House Builder</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <h2>Beam Stiffness Solver — Canvas Testbed</h2>
+    <div id="root"></div>
 
-<div class="row">
-  <button class="chip" type="button" tabindex="-1" aria-disabled="true">Segments</button>
-  <input id="numSegments" type="number" min="1" max="10" value="2" />
+    <script type="text/babel">
 
-  <button class="chip" type="button" tabindex="-1" aria-disabled="true">Total Length</button>
-  <input id="totalLength" type="number" min="0" step="any" value="120" style="width:90px" />
+const { useState, useEffect, useRef } = React;
 
-  <button class="primary" type="button" onclick="buildBeam()">Build Beam</button>
-  <button type="button" onclick="solveBeam()">Solve</button>
-  <button type="button" onclick="openSectionsCatalog()">Sections Catalog</button>
-  <button type="button" onclick="optimizeSectionsDiscrete()">Optimize Sections (Discrete)</button>
-  <button type="button" onclick="exportCSV()">Export CSV</button>
+// --- CONSTANTS ---
+const INSULATION_OPTIONS = [
+    { id: 'none', name: 'No Insulation', rValue: 2, color: 0xe5e7eb },
+    { id: 'fiberglass-r13', name: 'Fiberglass Batt R-13', rValue: 13, color: 0xfbbf24 },
+    { id: 'fiberglass-r19', name: 'Fiberglass Batt R-19', rValue: 19, color: 0xf59e0b },
+    { id: 'fiberglass-r21', name: 'Fiberglass Batt R-21', rValue: 21, color: 0xd97706 },
+    { id: 'spray-foam-r25', name: 'Spray Foam R-25', rValue: 25, color: 0x10b981 },
+    { id: 'spray-foam-r30', name: 'Spray Foam R-30', rValue: 30, color: 0x059669 },
+    { id: 'rigid-foam-r20', name: 'Rigid Foam R-20', rValue: 20, color: 0x3b82f6 },
+];
 
-  <button class="chip" type="button" tabindex="-1" aria-disabled="true">EI height scale</button>
-  <input id="eiScale" type="number" step="0.01" value="1.00" style="width:70px" />
-</div>
+const EXTERIOR_MATERIALS = [
+    { id: 'brick-red', name: 'Red Brick', color: 0x8B4513 },
+    { id: 'brick-tan', name: 'Tan Brick', color: 0xD2B48C },
+    { id: 'vinyl-white', name: 'White Vinyl Siding', color: 0xF5F5F5 },
+    { id: 'vinyl-gray', name: 'Gray Vinyl Siding', color: 0x808080 },
+    { id: 'vinyl-beige', name: 'Beige Vinyl Siding', color: 0xF5F5DC },
+    { id: 'clapboard-white', name: 'White Clapboard', color: 0xFAFAFA },
+    { id: 'clapboard-blue', name: 'Blue Clapboard', color: 0x4682B4 },
+    { id: 'stucco-white', name: 'White Stucco', color: 0xFFFFF0 },
+    { id: 'stucco-tan', name: 'Tan Stucco', color: 0xD2B48C },
+    { id: 'stone-gray', name: 'Gray Stone', color: 0x708090 },
+];
 
-  <div id="stage">
-    <canvas id="beamCanvas" width="960" height="275"></canvas>
+const ROOF_MATERIALS = [
+    { id: 'asphalt-black', name: 'Black Asphalt Shingles', color: 0x2F2F2F, reflectivity: 0.05 },
+    { id: 'asphalt-gray', name: 'Gray Asphalt Shingles', color: 0x808080, reflectivity: 0.15 },
+    { id: 'asphalt-brown', name: 'Brown Asphalt Shingles', color: 0x654321, reflectivity: 0.10 },
+    { id: 'metal-white', name: 'White Metal Roof', color: 0xF5F5F5, reflectivity: 0.65 },
+    { id: 'metal-black', name: 'Black Metal Roof', color: 0x1C1C1C, reflectivity: 0.05 },
+    { id: 'metal-silver', name: 'Silver Metal Roof', color: 0xC0C0C0, reflectivity: 0.55 },
+    { id: 'tile-terracotta', name: 'Terracotta Tiles', color: 0xE2725B, reflectivity: 0.25 },
+    { id: 'tile-concrete', name: 'Concrete Tiles', color: 0x999999, reflectivity: 0.30 },
+];
 
-    <div id="charts">
-      <canvas id="dispPlot" class="plot" width="960" height="260"></canvas>
-      <canvas id="momentPlot" class="plot" width="960" height="260"></canvas>
-      <canvas id="shearPlot" class="plot" width="960" height="260"></canvas>
-      <canvas id="stressPlot" class="plot" width="960" height="260"></canvas>
-    </div>
-  </div>
+const FEATURE_STATS = {
+    'window-std': { name: 'Std Window', rValue: 3, width: 3, height: 4, color: 0x87ceeb },
+    'window-pic': { name: 'Picture Window', rValue: 3, width: 6, height: 5, color: 0x87ceeb },
+    'door': { name: 'Door', rValue: 5, width: 3, height: 7, color: 0x8b4513 }
+};
 
-  <script>
-    // Keep canvases crisp when CSS width changes
-    function syncCanvasSizes() {
-      const ids = ['beamCanvas','dispPlot','momentPlot','shearPlot','stressPlot'];
-      let changed = false;
-      for (const id of ids) {
-        const cv = document.getElementById(id);
-        if (!cv) continue;
-        const w = Math.round(cv.getBoundingClientRect().width);
-        const h = Math.round(cv.getBoundingClientRect().height);
-        if (w && h && (cv.width !== w || cv.height !== h)) {
-          cv.width = w; cv.height = h; changed = true;
+// Icons
+const HomeIcon = () => (<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>);
+const FireIcon = () => (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" /></svg>);
+const SnowIcon = () => (<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>); 
+const TrashIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>);
+const SunIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>);
+const MoonIcon = () => (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>);
+
+// OrbitControls (Standard)
+class OrbitControls {
+    constructor(camera, domElement) {
+        this.camera = camera;
+        this.domElement = domElement;
+        this.target = new THREE.Vector3(0, 15, 0);
+        this.minDistance = 20;
+        this.maxDistance = 200;
+        this.rotateSpeed = 0.5;
+        this.scale = 1;
+        this.spherical = new THREE.Spherical();
+        this.sphericalDelta = new THREE.Spherical();
+        this.panOffset = new THREE.Vector3();
+        this.state = 'none';
+        this.rotateStart = new THREE.Vector2();
+        this.rotateEnd = new THREE.Vector2();
+        this.rotateDelta = new THREE.Vector2();
+        this.panStart = new THREE.Vector2();
+        this.panEnd = new THREE.Vector2();
+        this.panDelta = new THREE.Vector2();
+        this.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+        this.domElement.addEventListener('wheel', this.onMouseWheel.bind(this));
+        this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    
+    onMouseDown(event) {
+        event.preventDefault();
+        if (event.button === 0) {
+            this.state = 'rotate';
+            this.rotateStart.set(event.clientX, event.clientY);
+        } else if (event.button === 2) {
+            this.state = 'pan';
+            this.panStart.set(event.clientX, event.clientY);
         }
-      }
-      if (changed) {
-        try { drawBeam(); } catch(_) {}
-        try {
-          if (window.lastU && lastU.u && lastU.map) {
-            plotDisplacement(lastU.u, lastU.map);
-            plotMoment(); plotShearFromMoment(); plotBendingStress();
-          }
-        } catch(_) {}
-      }
+        this.domElement.addEventListener('mousemove', this.onMouseMove.bind(this));
+        this.domElement.addEventListener('mouseup', this.onMouseUp.bind(this));
     }
-    window.addEventListener('load', syncCanvasSizes);
-    window.addEventListener('resize', syncCanvasSizes);
-  </script>
-
-  <script>
-    // -------------------- State --------------------
-    let K_global = null;
-    let segments = [];
-    let nodes = [];
-    let elementForces = null; // [{V1,M1,V2,M2,L}, ...]
-    let lastU = null;         // {u, map}
-    let unitSystem = 'US';
-
-    // Discrete Sections Catalog (up to 10 rows) — name, I, St, Sb, optional A, wd
-    let sectionsCatalog = [
-      { name: 'S-1', I: 20, St: 5,  Sb: 5,  A: 0, wd: 0 },
-      { name: 'S-2', I: 40, St: 8,  Sb: 8,  A: 0, wd: 0 },
-      { name: 'S-3', I: 80, St: 12, Sb: 12, A: 0, wd: 0 }
-    ];
-
-    // -------------------- Helpers --------------------
-    function isHinge(node){ return !!node.pinJoint; }
-
-    function fmtSig3(n){
-      if (n === 0) return '0';
-      if (!isFinite(n)) return String(n);
-      const abs = Math.abs(n);
-      if (abs >= 1e-3 && abs < 1e4) {
-        const s = Number(n).toPrecision(3);
-        return (s.includes('e') || s.includes('E')) ? Number(n).toString() : String(parseFloat(s));
-      } else {
-        return Number(n).toExponential(2);
-      }
+    
+    onMouseMove(event) {
+        event.preventDefault();
+        if (this.state === 'rotate') {
+            this.rotateEnd.set(event.clientX, event.clientY);
+            this.rotateDelta.subVectors(this.rotateEnd, this.rotateStart).multiplyScalar(this.rotateSpeed);
+            this.rotateLeft(2 * Math.PI * this.rotateDelta.x / this.domElement.clientHeight);
+            this.rotateUp(2 * Math.PI * this.rotateDelta.y / this.domElement.clientHeight);
+            this.rotateStart.copy(this.rotateEnd);
+        } else if (this.state === 'pan') {
+            this.panEnd.set(event.clientX, event.clientY);
+            this.panDelta.subVectors(this.panEnd, this.panStart).multiplyScalar(0.5);
+            this.pan(this.panDelta.x, this.panDelta.y);
+            this.panStart.copy(this.panEnd);
+        }
+        this.update();
     }
-
-    function normalizeSegments(){
-      for (const seg of segments){
-        if (seg.St === undefined && seg.S !== undefined) seg.St = seg.S;
-        if (seg.Sb === undefined && seg.S !== undefined) seg.Sb = seg.S;
-        if (seg.St === undefined) seg.St = 5.3;
-        if (seg.Sb === undefined) seg.Sb = 5.3;
-        if (seg.qL === undefined && seg.q !== undefined) seg.qL = seg.q;
-        if (seg.qR === undefined && seg.q !== undefined) seg.qR = seg.q;
-        if (seg.qL === undefined) seg.qL = 0;
-        if (seg.qR === undefined) seg.qR = 0;
-        if (seg.wd === undefined) seg.wd = 0;
-        if (seg.A  === undefined) seg.A  = 0;
-        delete seg.S; delete seg.q;
-      }
+    
+    onMouseUp() {
+        this.domElement.removeEventListener('mousemove', this.onMouseMove.bind(this));
+        this.domElement.removeEventListener('mouseup', this.onMouseUp.bind(this));
+        this.state = 'none';
     }
+    
+    onMouseWheel(event) {
+        event.preventDefault();
+        if (event.deltaY < 0) this.scale /= 0.95; else this.scale *= 0.95;
+        this.update();
+    }
+    rotateLeft(angle) { this.sphericalDelta.theta -= angle; }
+    rotateUp(angle) { this.sphericalDelta.phi -= angle; }
+    pan(deltaX, deltaY) {
+        const offset = new THREE.Vector3().copy(this.camera.position).sub(this.target);
+        let targetDistance = offset.length() * Math.tan((this.camera.fov / 2) * Math.PI / 180.0);
+        const panLeft = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0).multiplyScalar(-2 * deltaX * targetDistance / this.domElement.clientHeight);
+        const panUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1).multiplyScalar(2 * deltaY * targetDistance / this.domElement.clientHeight);
+        this.panOffset.add(panLeft).add(panUp);
+    }
+    update() {
+        const offset = new THREE.Vector3().copy(this.camera.position).sub(this.target);
+        this.spherical.setFromVector3(offset);
+        this.spherical.theta += this.sphericalDelta.theta;
+        this.spherical.phi += this.sphericalDelta.phi;
+        this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
+        this.spherical.radius *= this.scale;
+        this.spherical.radius = Math.max(this.minDistance, Math.min(this.maxDistance, this.spherical.radius));
+        this.target.add(this.panOffset);
+        offset.setFromSpherical(this.spherical);
+        this.camera.position.copy(this.target).add(offset);
+        this.camera.lookAt(this.target);
+        this.sphericalDelta.set(0, 0, 0);
+        this.panOffset.set(0, 0, 0);
+        this.scale = 1;
+    }
+}
 
-    function buildDOFMap(){
-      const n = nodes.length; const idxW = new Array(n); const thLeft = new Array(n); const thRight = new Array(n); let dof=0;
-      for (let i=0;i<n;i++) idxW[i] = dof++;
-      for (let i=0;i<n;i++){
-        const hinge = isHinge(nodes[i]); const hasLeft = (i>0); const hasRight = (i<n-1);
-        if (!hinge){
-          const r = dof++; thLeft[i] = hasLeft? r : r; thRight[i] = hasRight? r : r;
+// Helper for Textures (Compass Text)
+function createTextTexture(text, color = 'black') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 32, 32);
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+
+function HouseBuilder() {
+    const [dimensions, setDimensions] = useState({ length: 40, width: 30 });
+    const [numStories, setNumStories] = useState(2); // New State for Stories
+    const [selectedWall, setSelectedWall] = useState(null);
+    const [wallInsulation, setWallInsulation] = useState({});
+    const [wallExterior, setWallExterior] = useState({});
+    const [roofMaterial, setRoofMaterial] = useState('asphalt-gray');
+    const [viewMode, setViewMode] = useState('3d');
+    const [selectionMode, setSelectionMode] = useState('exterior');
+    const [wallFeatures, setWallFeatures] = useState({});
+    const [hvacMode, setHvacMode] = useState('heating'); 
+
+    // Environmental State
+    const [outsideTemp, setOutsideTemp] = useState(32);
+    const [groundTemp, setGroundTemp] = useState(50);
+    const [insideTemp, setInsideTemp] = useState(70);
+    const [windSpeed, setWindSpeed] = useState(10);
+    const [windDirection, setWindDirection] = useState('north');
+    
+    // Scenario State
+    const [timeOfDay, setTimeOfDay] = useState('day'); 
+    const [sunVisible, setSunVisible] = useState(true); 
+    const [latitude, setLatitude] = useState(45); 
+    const [nightCondition, setNightCondition] = useState('clear'); 
+    const [atticRValue, setAtticRValue] = useState(40);
+    const [furnaceEfficiency, setFurnaceEfficiency] = useState(80); 
+
+    const [humidity, setHumidity] = useState(50); 
+    const [occupants, setOccupants] = useState(4); 
+    const [appliances, setAppliances] = useState('medium'); 
+
+    const mountRef = useRef(null);
+    const sceneRef = useRef(null);
+    const cameraRef = useRef(null);
+    const rendererRef = useRef(null);
+    const controlsRef = useRef(null);
+    const wallMeshesRef = useRef({});
+    const roofMeshesRef = useRef([]);
+    const sunLightRef = useRef(null);
+    const ambientLightRef = useRef(null);
+
+    const WALL_HEIGHT = 9;
+    const ROOF_PITCH = 3/8;
+    
+    // Dynamic floors array based on numStories
+    const getFloors = () => {
+        const base = ['basement'];
+        if(numStories >= 1) base.push('first');
+        if(numStories >= 2) base.push('second');
+        if(numStories >= 3) base.push('third');
+        return base;
+    };
+    
+    const floors = getFloors();
+
+    useEffect(() => {
+        if (hvacMode === 'cooling') {
+            setOutsideTemp(90); setInsideTemp(72); setTimeOfDay('day'); setSunVisible(true);
         } else {
-          if (hasLeft)  thLeft[i]  = dof++;
-          if (hasRight) thRight[i] = dof++;
+            setOutsideTemp(32); setInsideTemp(70);
         }
-      }
-      return { idxW, thLeft, thRight, ndof: dof };
-    }
+    }, [hvacMode]);
 
-    // -------------------- Editors --------------------
-    function editNode(i) {
-      const node = nodes[i];
-      Swal.fire({
-        title: `Node ${i} Properties`,
-        html:
-          `<label><span>BC:</span><select id="bc" class="swal2-select">
-            <option value="free" ${node.bc === 'free' ? 'selected' : ''}>Free</option>
-            <option value="pinned" ${node.bc === 'pinned' ? 'selected' : ''}>Simple (w=0, θ free)</option>
-            <option value="fixed" ${node.bc === 'fixed' ? 'selected' : ''}>Fixed</option>
-          </select></label>
-          <label><span>F:</span><input id="F" class="swal2-input" value="${node.F}"></label>
-          <label><span>M:</span><input id="M" class="swal2-input" value="${node.M}"></label>
-          <label><span>Kv:</span><input id="Kv" class="swal2-input" value="${node.Kv}"></label>
-          <label><span>Km:</span><input id="Km" class="swal2-input" value="${node.Km}"></label>
-          <hr style='margin:6px 0;'>
-          <label><span>Pin joint (moment release; shear-only transfer):</span><input type="checkbox" id="pinJoint" ${node.pinJoint? 'checked':''}></label>
-          <label><span>Prescribed w:</span><input id="w0" class="swal2-input" placeholder="(blank = none)" value="${Number.isFinite(node.w0)? node.w0 : ''}"></label>
-          <label><span>Prescribed θ:</span><input id="th0" class="swal2-input" placeholder="(blank = none)" value="${Number.isFinite(node.th0)? node.th0 : ''}"></label>`,
-        focusConfirm: false,
-        preConfirm: () => {
-          const bcVal = document.getElementById('bc').value;
-          const Fv = parseFloat(document.getElementById('F').value);
-          const Mv = parseFloat(document.getElementById('M').value);
-          const Kv = parseFloat(document.getElementById('Kv').value);
-          const Km = parseFloat(document.getElementById('Km').value);
-          const pin = document.getElementById('pinJoint').checked;
-          const w0raw = document.getElementById('w0').value.trim();
-          const th0raw = document.getElementById('th0').value.trim();
-          const pinOK = !(bcVal === 'fixed' || Km > 0);
-          return [ bcVal, Fv, Mv, Kv, Km, pin && pinOK, (w0raw==='')? null: parseFloat(w0raw), (th0raw==='')? null: parseFloat(th0raw) ];
-        }
-      }).then((res)=>{
-        const data = res.value;
-        if (data) nodes[i] = { bc: data[0], F: data[1], M: data[2], Kv: data[3], Km: data[4], pinJoint: data[5], w0: data[6], th0: data[7] };
-        drawBeam();
-      });
-    }
+    useEffect(() => {
+        if (viewMode !== '3d' || !mountRef.current) return;
 
-    function editSegment(i) {
-      const seg = segments[i];
-      Swal.fire({
-        title: `Segment ${i} Properties`,
-        html:
-          `<div id="segForm">
-            <label><span>E:</span><input id="E" class="swal2-input" value="${seg.E}"></label>
-            <label><span>I:</span><input id="I" class="swal2-input" value="${seg.I}"></label>
-            <label><span>A (area):</span><input id="A" class="swal2-input" value="${seg.A ?? 0}"></label>
-            <label><span>L:</span><input id="L" class="swal2-input" value="${seg.L}"></label>
-            <label><span>St (top):</span><input id="St" class="swal2-input" value="${seg.St ?? seg.S ?? ''}"></label>
-            <label><span>Sb (bottom):</span><input id="Sb" class="swal2-input" value="${seg.Sb ?? seg.S ?? ''}"></label>
-            <label><span>qL (left, + up):</span><input id="qL" class="swal2-input" value="${seg.qL ?? seg.q ?? 0}"></label>
-            <label><span>qR (right, + up):</span><input id="qR" class="swal2-input" value="${seg.qR ?? seg.q ?? 0}"></label>
-            <label><span>wd (weight dens.):</span><input id="wd" class="swal2-input" value="${seg.wd ?? 0}"></label>
-            <div id="matRow" style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-              <span style="font-size:12px; color:#555; margin-right:4px;">Material:</span>
-              <button type="button" class="matBtn" data-mat="steel" style="height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;">Steel</button>
-              <button type="button" class="matBtn" data-mat="aluminum" style="height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;">Aluminum</button>
-              <button type="button" class="matBtn" data-mat="hardwood" style="height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;">Hard wood</button>
-              <button type="button" class="matBtn" data-mat="softwood" style="height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;">Soft wood</button>
-            </div>
-            <div style="margin-top:6px;">
-              <button id="secCalcToggle" type="button" style="height:28px; padding:0 10px; border-radius:6px; border:1px solid #99c; background:#eef; color:#223;">Section Calculator…</button>
-            </div>
-            <div id="secCalc" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #ddd;">
-              <div id="shapeGrid" style="display:grid; grid-template-columns:repeat(3, auto); gap:6px; align-items:center;">
-                <button type="button" class="shapeBtn" data-shape="rect" title="Rectangle" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/></svg><span>Rectangle</span>
-                </button>
-                <button type="button" class="shapeBtn" data-shape="circ" title="Circle / Tube" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="28"><circle cx="14" cy="14" r="12" fill="#ddd" stroke="#666"/><circle cx="14" cy="14" r="6" fill="#fff" stroke="#666"/></svg><span>Circle</span>
-                </button>
-                <button type="button" class="shapeBtn" data-shape="tube" title="Hollow Box" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="28" height="20"><rect x="2" y="2" width="24" height="16" fill="#ddd" stroke="#666"/><rect x="7" y="6" width="14" height="8" fill="#fff" stroke="#666"/></svg><span>Hollow Box</span>
-                </button>
-                <button type="button" class="shapeBtn" data-shape="ibeam" title="I-Beam" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="8" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="28" height="4" fill="#ddd" stroke="#666"/></svg><span>I-Beam</span>
-                </button>
-                <button type="button" class="shapeBtn" data-shape="channel" title="Channel" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="6" height="16" fill="#ddd" stroke="#666"/><rect x="2" y="2" width="22" height="4" fill="#ddd" stroke="#666"/><rect x="2" y="14" width="22" height="4" fill="#ddd" stroke="#666"/></svg><span>Channel</span>
-                </button>
-                <button type="button" class="shapeBtn" data-shape="tbeam" title="T-Beam" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; background:#fafafa;">
-                  <svg width="32" height="20"><rect x="2" y="2" width="28" height="4" fill="#ddd" stroke="#666"/><rect x="14" y="6" width="4" height="12" fill="#ddd" stroke="#666"/></svg><span>T-Beam</span>
-                </button>
-              </div>
-              <div id="secInputs" style="margin-top:8px; font-size:12px;"></div>
-            </div>
-          </div>`,
-        focusConfirm: false,
-        didOpen: (el)=>{ setupSectionCalc(el, i); setupMaterialPresets(el, i); },
-        preConfirm: () => [
-          parseFloat(document.getElementById('E').value),
-          parseFloat(document.getElementById('I').value),
-          parseFloat(document.getElementById('A').value),
-          parseFloat(document.getElementById('L').value),
-          parseFloat(document.getElementById('St').value),
-          parseFloat(document.getElementById('Sb').value),
-          parseFloat(document.getElementById('qL').value),
-          parseFloat(document.getElementById('qR').value),
-          parseFloat(document.getElementById('wd').value)
-        ]
-      }).then((res)=>{
-        const data = res.value;
-        if (data) segments[i] = { E: data[0], I: data[1], A: data[2], L: data[3], St: data[4], Sb: data[5], qL: data[6], qR: data[7], wd: data[8], secIndex: segments[i].secIndex };
-        drawBeam();
-      });
-    }
+        const scene = new THREE.Scene();
+        sceneRef.current = scene;
 
-    // ---- Section Calculator helpers ----
-    function setupSectionCalc(el, segIndex){
-      const toggleBtn = el.querySelector('#secCalcToggle');
-      const panel = el.querySelector('#secCalc');
-      if (toggleBtn && panel){ toggleBtn.addEventListener('click', ()=>{ panel.style.display = panel.style.display==='none' ? 'block' : 'none'; }); }
-      const grid = el.querySelector('#shapeGrid');
-      const inputs = el.querySelector('#secInputs');
-      function renderForm(shape){
-        let html='';
-        if (shape==='rect'){
-          html = `
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <label><span style="width:80px; display:inline-block;">b (width)</span><input id="sh_b" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:80px; display:inline-block;">h (height)</span><input id="sh_h" class="swal2-input" style="width:100px"></label>
-              <button id="applySec" type="button" style="height:28px; padding:0 12px; border:1px solid #7aa; border-radius:6px; background:#e6f3ff;">Use</button>
-            </div>`;
-        } else if (shape==='circ'){
-          html = `
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <label><span style="width:80px; display:inline-block;">OD</span><input id="sh_od" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:80px; display:inline-block;">ID</span><input id="sh_id" class="swal2-input" style="width:100px" value="0"></label>
-              <button id="applySec" type="button" style="height:28px; padding:0 12px; border:1px solid #7aa; border-radius:6px; background:#e6f3ff;">Use</button>
-            </div>`;
-        } else if (shape==='tube'){
-          html = `
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <label><span style="width:80px; display:inline-block;">b<sub>o</sub></span><input id="sh_bo" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:80px; display:inline-block;">h<sub>o</sub></span><input id="sh_ho" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:80px; display:inline-block;">b<sub>i</sub></span><input id="sh_bi" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:80px; display:inline-block;">h<sub>i</sub></span><input id="sh_hi" class="swal2-input" style="width:100px"></label>
-              <button id="applySec" type="button" style="height:28px; padding:0 12px; border:1px solid #7aa; border-radius:6px; background:#e6f3ff;">Use</button>
-            </div>`;
-        } else if (shape==='ibeam' || shape==='channel'){
-          html = `
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <label><span style="width:120px; display:inline-block;">h (depth)</span><input id="sh_h" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">b<sub>f</sub> (flange)</span><input id="sh_bf" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">t<sub>f</sub> (flange)</span><input id="sh_tf" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">t<sub>w</sub> (web)</span><input id="sh_tw" class="swal2-input" style="width:100px"></label>
-              <button id="applySec" type="button" style="height:28px; padding:0 12px; border:1px solid #7aa; border-radius:6px; background:#e6f3ff;">Use</button>
-            </div>`;
-        } else if (shape==='tbeam'){
-          html = `
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-              <label><span style="width:120px; display:inline-block;">h (total)</span><input id="sh_h" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">b<sub>f</sub> (flange)</span><input id="sh_bf" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">t<sub>f</sub> (flange)</span><input id="sh_tf" class="swal2-input" style="width:100px"></label>
-              <label><span style="width:120px; display:inline-block;">t<sub>w</sub> (web)</span><input id="sh_tw" class="swal2-input" style="width:100px"></label>
-              <button id="applySec" type="button" style="height:28px; padding:0 12px; border:1px solid #7aa; border-radius:6px; background:#e6f3ff;">Use</button>
-              <div style="font-size:11px; color:#555;">Assumes flange at the <b>top</b>.</div>
-            </div>`;
-        }
-        inputs.innerHTML = html;
-        const apply = el.querySelector('#applySec');
-        if (apply){
-          apply.addEventListener('click', ()=>{
-            try{
-              const out = (function(){
-                if (shape==='rect'){
-                  const b = parseFloat(el.querySelector('#sh_b').value), h = parseFloat(el.querySelector('#sh_h').value);
-                  if (!(b>0 && h>0)) throw new Error('Enter b,h > 0');
-                  const A = b*h; const I = b*Math.pow(h,3)/12; const c=h/2; const S = I/c; return {A,I,St:S,Sb:S};
-                }
-                if (shape==='circ'){
-                  const od = parseFloat(el.querySelector('#sh_od').value), id = parseFloat(el.querySelector('#sh_id').value||'0');
-                  if (!(od>0) || id<0 || id>=od) throw new Error('Require OD>0 and 0≤ID<OD');
-                  const A = Math.PI*(od*od - id*id)/4; const I = Math.PI*(Math.pow(od,4) - Math.pow(id,4))/64; const c=od/2; const S=I/c; return {A,I,St:S,Sb:S};
-                }
-                if (shape==='tube'){
-                  const bo=parseFloat(el.querySelector('#sh_bo').value), ho=parseFloat(el.querySelector('#sh_ho').value), bi=parseFloat(el.querySelector('#sh_bi').value), hi=parseFloat(el.querySelector('#sh_hi').value);
-                  if (!(bo>0 && ho>0 && bi>=0 && hi>=0 && bo>bi && ho>hi)) throw new Error('Require bo>bi≥0 and ho>hi≥0');
-                  const A = bo*ho - bi*hi; const I = (bo*Math.pow(ho,3) - bi*Math.pow(hi,3))/12; const c=ho/2; const S=I/c; return {A,I,St:S,Sb:S};
-                }
-                if (shape==='ibeam' || shape==='channel'){
-                  const h=parseFloat(el.querySelector('#sh_h').value), bf=parseFloat(el.querySelector('#sh_bf').value), tf=parseFloat(el.querySelector('#sh_tf').value), tw=parseFloat(el.querySelector('#sh_tw').value);
-                  if (!(h>0 && bf>0 && tf>0 && tw>0 && h>2*tf)) throw new Error('Check dimensions: h>2tf and positive');
-                  const hw = h - 2*tf; const A = 2*bf*tf + tw*hw; const d = h/2 - tf/2;
-                  const I = 2*(bf*Math.pow(tf,3)/12 + bf*tf*Math.pow(d,2)) + (tw*Math.pow(hw,3))/12;
-                  const c = h/2; const S = I/c; return {A,I,St:S,Sb:S};
-                }
-                if (shape==='tbeam'){
-                  const h=parseFloat(el.querySelector('#sh_h').value), bf=parseFloat(el.querySelector('#sh_bf').value), tf=parseFloat(el.querySelector('#sh_tf').value), tw=parseFloat(el.querySelector('#sh_tw').value);
-                  if (!(h>0 && bf>0 && tf>0 && tw>0 && h>tf)) throw new Error('Check dimensions: h>tf and positive');
-                  const hw = h - tf; // web height
-                  const A_f = bf*tf, y_f = h - tf/2; const I_f = bf*Math.pow(tf,3)/12;
-                  const A_w = tw*hw, y_w = hw/2;     const I_w = tw*Math.pow(hw,3)/12;
-                  const A = A_f + A_w; const ybar = (A_f*y_f + A_w*y_w)/A;
-                  const I = I_f + A_f*Math.pow(y_f - ybar,2) + I_w + A_w*Math.pow(y_w - ybar,2);
-                  const St = I/(h - ybar), Sb = I/(ybar - 0);
-                  return {A,I,St,Sb};
-                }
-                throw new Error('Unknown shape');
-              })();
-              const set = (id,val)=>{ const inp = document.getElementById(id); if (inp){ inp.value = val; inp.dispatchEvent(new Event('input', {bubbles:true})); } };
-              const to3 = (v)=> Number(v).toPrecision(3);
-              set('A', to3(out.A)); set('I', to3(out.I)); set('St', to3(out.St)); set('Sb', to3(out.Sb));
-              try {
-                const tgt = segments[segIndex];
-                if (tgt) {
-                  tgt.A  = parseFloat(to3(out.A));
-                  tgt.I  = parseFloat(to3(out.I));
-                  tgt.St = parseFloat(to3(out.St));
-                  tgt.Sb = parseFloat(to3(out.Sb));
-                }
-                drawBeam();
-              } catch(_) {}
-              Swal.fire({icon:'success', title:'Section properties applied', timer:900, showConfirmButton:false});
-            }catch(err){ Swal.fire('Invalid input', err.message || String(err), 'error'); }
-          });
-        }
-      }
-      if (grid){ grid.querySelectorAll('button[data-shape]').forEach(btn=> btn.addEventListener('click', ()=> renderForm(btn.dataset.shape)) ); }
-    }
+        const width = mountRef.current.clientWidth;
+        const height = 600;
 
-    // ---- Material presets (E & wd) ----
-    function setupMaterialPresets(el, segIndex){
-      const row = el.querySelector('#matRow');
-      if (row && !row.querySelector('.unitBtn')){
-        const spacer = document.createElement('span'); spacer.style.cssText = 'font-size:12px; color:#555; margin-left:8px;'; spacer.textContent = 'Units:';
-        const us = document.createElement('button'); us.type='button'; us.className='unitBtn'; us.dataset.unit='US'; us.textContent='US'; us.style.cssText='height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;';
-        const si = document.createElement('button'); si.type='button'; si.className='unitBtn'; si.dataset.unit='SI'; si.textContent='Metric (SI)'; si.style.cssText='height:26px; padding:0 10px; border:1px solid #bbb; border-radius:6px; background:#f5f5f5;';
-        row.appendChild(spacer); row.appendChild(us); row.appendChild(si);
-      }
+        const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+        camera.position.set(60, 40, 60);
+        cameraRef.current = camera;
 
-      const presets = {
-        US: { steel: {E:29e6, wd:0.283}, aluminum:{E:10e6, wd:0.098}, hardwood:{E:1.6e6, wd:0.025}, softwood:{E:1.2e6, wd:0.018} },
-        SI: { steel: {E:200e9, wd:77000}, aluminum:{E:69e9, wd:26500}, hardwood:{E:11e9, wd:7000}, softwood:{E:8.3e9, wd:5000} }
-      };
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        mountRef.current.appendChild(renderer.domElement);
+        rendererRef.current = renderer;
 
-      function refreshUnitButtons(){
-        el.querySelectorAll('.unitBtn').forEach(b=>{
-          const active = (b.dataset.unit === unitSystem);
-          b.style.background  = active ? '#e6f3ff' : '#f5f5f5';
-          b.style.borderColor = active ? '#5a8' : '#bbb';
-          b.style.fontWeight  = active ? '600' : '400';
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.update();
+        controlsRef.current = controls;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        ambientLightRef.current = ambientLight;
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        scene.add(sunLight);
+        sunLightRef.current = sunLight;
+
+        const groundGeometry = new THREE.PlaneGeometry(200, 200);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x3a7d3a, roughness: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.4 
         });
-      }
-      el.querySelectorAll('.unitBtn').forEach(btn=>{
-        btn.addEventListener('click', ()=>{ unitSystem = btn.dataset.unit; refreshUnitButtons(); });
-      });
-      refreshUnitButtons();
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
 
-      el.querySelectorAll('.matBtn').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const key = btn.dataset.mat; const pset = presets[unitSystem] || presets.US; const p = pset[key]; if (!p) return;
-          const eIn = el.querySelector('#E'); const wdIn = el.querySelector('#wd');
-          if (eIn)  eIn.value  = p.E;
-          if (wdIn) wdIn.value = p.wd;
-          try { const tgt = segments[segIndex]; if (tgt){ tgt.E = p.E; tgt.wd = p.wd; } drawBeam(); } catch(_) {}
-        });
-      });
-    }
+        const gridHelper = new THREE.GridHelper(100, 50, 0x444444, 0x888888);
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.3;
+        scene.add(gridHelper);
 
-    // -------------------- Build & Draw --------------------
-    function buildBeam() {
-      const numSegments = parseInt(document.getElementById("numSegments").value);
-      const totalLen = parseFloat(document.getElementById("totalLength").value);
-      if (isNaN(numSegments) || numSegments < 1 || numSegments > 10) { alert("Please enter a valid number of segments (1-10)."); return; }
-      if (!isFinite(totalLen) || totalLen <= 0) { alert("Please enter a valid Total Length (> 0)."); return; }
+        // CREATE COMPASS ON GROUND
+        const compassGroup = new THREE.Group();
+        
+        const nMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
+        const nGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0.5,0), new THREE.Vector3(0,0.5,-15)]);
+        const nLine = new THREE.Line(nGeo, nMat);
+        
+        const arrowGeo = new THREE.ConeGeometry(1, 2, 8);
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const arrowHead = new THREE.Mesh(arrowGeo, arrowMat);
+        arrowHead.position.set(0, 0.5, -15);
+        arrowHead.rotation.x = -Math.PI/2;
+        
+        const crossMat = new THREE.LineBasicMaterial({ color: 0x444444 });
+        const ewGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-10,0.5,0), new THREE.Vector3(10,0.5,0)]);
+        const sGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0.5,0), new THREE.Vector3(0,0.5,10)]);
+        const ewLine = new THREE.Line(ewGeo, crossMat);
+        const sLine = new THREE.Line(sGeo, crossMat);
 
-      const segLen = totalLen / numSegments;
-
-      // Initialize/evenly space lengths on Build
-      const seed = segments.length ? segments[0] : { E: 12e6, I: 21.3, St: 5.3, Sb: 5.3, qL: 0, qR: 0, wd: 0, A: 0 };
-      const arr = [];
-      for (let i=0;i<numSegments;i++){
-        const prev = (i && arr[i-1]) ? arr[i-1] : seed;
-        arr.push({ ...prev, L: segLen });
-      }
-      segments = arr;
-      normalizeSegments();
-
-      // Rebuild nodes to match
-      nodes = Array(numSegments + 1).fill().map(() => ({ bc: 'free', F: 0, M: 0, Kv: 0, Km: 0, pinJoint: false, w0: null, th0: null }));
-
-      elementForces = null; K_global = null; lastU = null; drawBeam();
-    }
-
-    function drawBeam() {
-      const canvas = document.getElementById("beamCanvas");
-      const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (segments.length === 0) return;
-
-      const margin = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pad')) || 50;
-      const totalLength = segments.reduce((sum, seg) => sum + seg.L, 0);
-      const scaleX = (canvas.width - 2 * margin) / totalLength;
-      const maxEI = Math.max(...segments.map(seg => seg.E * seg.I));
-      const maxHeight = 0.40 * canvas.height * 0.25;
-      const eiScale = parseFloat(document.getElementById('eiScale').value || '1');
-      const maxAbsQ = Math.max(...segments.flatMap(seg => [Math.abs(seg.qL || 0), Math.abs(seg.qR || 0)]), 0);
-      const maxAbsF = Math.max(...nodes.map(n => Math.abs(n.F || 0)), 0);
-      const maxAbsW = Math.max(...segments.map(s => Math.abs((s.wd||0)*(s.A||0))), 0);
-
-      const midY = Math.round(canvas.height * 0.35);
-      ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(margin, midY); ctx.lineTo(canvas.width - margin, midY); ctx.stroke();
-
-      const approxTicks = 10, tickPx = (canvas.width - 2*margin) / approxTicks;
-      ctx.fillStyle = '#666'; ctx.textAlign = 'center'; ctx.font = '11px sans-serif';
-      const beamHalf = (maxHeight * eiScale) / 2;
-      const tickLabelY = midY + Math.max(beamHalf + 26, 36);
-      const MIN_GAP_BELOW_TICKS = 14;
-      for (let i=0;i<=approxTicks;i++){
-        const xx = margin + i*tickPx;
-        ctx.beginPath(); ctx.moveTo(xx, midY-6); ctx.lineTo(xx, midY+6); ctx.strokeStyle='#ddd'; ctx.stroke();
-        const xVal=(totalLength*i/approxTicks).toFixed(0);
-        ctx.fillText(xVal, xx, tickLabelY);
-      }
-
-      let x = margin;
-      for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i];
-        const width = seg.L * scaleX;
-        const height = ((seg.E * seg.I) / maxEI) * maxHeight * eiScale;
-
-        // Darker gray shading (≈60%→30% lightness)
-        const wmag = Math.abs((seg.wd||0)*(seg.A||0));
-        const tGray = maxAbsW > 0 ? Math.min(1, wmag / maxAbsW) : 0;
-        const light = Math.round(60 - tGray * 30);
-        ctx.fillStyle = `hsl(0 0% ${light}%)`;
-        ctx.fillRect(x, midY - height/2, width, height);
-
-        drawLoadBlanket(ctx, x, midY, width, height, (seg.qL || 0), (seg.qR || 0), maxAbsQ);
-
-        const secName = (typeof seg.secIndex === 'number' && sectionsCatalog[seg.secIndex])
-          ? `Section: ${sectionsCatalog[seg.secIndex].name}` : null;
-
-        const props = [
-          ...(secName ? [secName] : []),
-          `E: ${fmtSig3(seg.E)}`, `I: ${fmtSig3(seg.I)}`, `A: ${fmtSig3(seg.A ?? 0)}`, `L: ${fmtSig3(seg.L)}`,
-          `St: ${fmtSig3(seg.St)}`, `Sb: ${fmtSig3(seg.Sb)}`, `qL: ${fmtSig3(seg.qL ?? 0)}`, `qR: ${fmtSig3(seg.qR ?? 0)}`, `wd: ${fmtSig3(seg.wd ?? 0)}`
+        const labelSize = 5;
+        const labels = [
+            { text: 'N', pos: [0, 0.6, -18], color: '#AA0000' },
+            { text: 'S', pos: [0, 0.6, 12], color: '#444444' },
+            { text: 'E', pos: [12, 0.6, 0], color: '#444444' },
+            { text: 'W', pos: [-12, 0.6, 0], color: '#444444' }
         ];
-        ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.font = '12px sans-serif';
-        const startY = Math.max(midY + height/2 + 14, tickLabelY + MIN_GAP_BELOW_TICKS);
-        for (let j=0;j<props.length;j++) ctx.fillText(props[j], x + width/2, startY + j*14);
 
-        drawNodeFeatures(ctx, x, midY, nodes[i], maxAbsF);
-        drawNodeDot(ctx, x, midY);
-        x += width;
-      }
-      drawNodeFeatures(ctx, x, midY, nodes[segments.length], maxAbsF);
-      drawNodeDot(ctx, x, midY);
-    }
-
-    function drawNodeDot(ctx, x, y){ ctx.beginPath(); ctx.fillStyle = '#06f'; ctx.arc(x, y, 6, 0, Math.PI*2); ctx.fill(); }
-
-    // Visualize linear distributed load q(x)
-    function drawLoadBlanket(ctx, x, midY, width, height, qL, qR, maxAbsQ){
-      if ((!qL && !qR) || !isFinite(maxAbsQ) || maxAbsQ <= 0) return;
-      const count = Math.max(6, Math.floor(width / 40));
-      const spacing = width / (count + 1);
-      ctx.save(); ctx.strokeStyle = '#0a8'; ctx.lineWidth = 1.5;
-      for (let k=1;k<=count;k++){
-        const xi = x + k*spacing; const r = (xi - x)/width;
-        const qx = qL + (qR - qL) * r; if (!qx) continue;
-        const up = qx > 0; const baseY = up ? (midY - height/2 - 6) : (midY + height/2 + 6);
-        const maxLen = 48;
-        const len = Math.max(10, (maxLen * Math.abs(qx)) / maxAbsQ);
-        const tipY = up ? (baseY - len) : (baseY + len);
-        ctx.beginPath(); ctx.moveTo(xi, baseY); ctx.lineTo(xi, tipY); ctx.stroke();
-        ctx.beginPath(); if (up){ ctx.moveTo(xi-6, tipY+8); ctx.lineTo(xi, tipY); ctx.lineTo(xi+6, tipY+8); }
-                                 else  { ctx.moveTo(xi-6, tipY-8); ctx.lineTo(xi, tipY); ctx.lineTo(xi+6, tipY-8); }
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    function drawNodeFeatures(ctx, x, y, node, maxAbsF){
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-      if (node.bc === 'pinned') { ctx.beginPath(); ctx.moveTo(x-16, y+18); ctx.lineTo(x, y); ctx.lineTo(x+16, y+18); ctx.closePath(); ctx.stroke(); }
-      else if (node.bc === 'fixed') { ctx.beginPath(); ctx.moveTo(x-6, y-24); ctx.lineTo(x-6, y+24); ctx.stroke(); for (let yy=y-24; yy<=y+24; yy+=8) { ctx.beginPath(); ctx.moveTo(x-6, yy); ctx.lineTo(x-18, yy+8); ctx.stroke(); } }
-      if (node.pinJoint) { ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2); ctx.stroke(); }
-      if (node.Kv !== 0) { ctx.beginPath(); let sY=y+10; ctx.moveTo(x, sY); for (let i=0;i<5;i++){ ctx.lineTo(x+(i%2===0?6:-6), sY+6); sY+=6; } ctx.lineTo(x, sY+6); ctx.stroke(); }
-      if (node.Km !== 0) { ctx.beginPath(); ctx.arc(x-24, y, 10, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x-14, y); ctx.lineTo(x-6, y); ctx.stroke(); }
-
-      // Nodal moment glyph
-      if (Math.abs(node.M) > 1e-12) {
-        const isPos = node.M > 0;
-        const r = 22;
-        ctx.beginPath();
-        if (isPos) ctx.arc(x, y, r, -0.5*Math.PI, 0.5*Math.PI, false);
-        else       ctx.arc(x, y, r,  0.5*Math.PI, -0.5*Math.PI, false);
-        ctx.stroke();
-        const theta = isPos ? 0.5*Math.PI : -0.5*Math.PI;
-        const tipX = x + r * Math.cos(theta);
-        const tipY = y + r * Math.sin(theta);
-        const shaft = 10, head = 12, phi = Math.PI/6, baseA = Math.PI;
-        ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(tipX - shaft, tipY);
-        ctx.moveTo(tipX, tipY); ctx.lineTo(tipX + head*Math.cos(baseA + phi), tipY + head*Math.sin(baseA + phi));
-        ctx.moveTo(tipX, tipY); ctx.lineTo(tipX + head*Math.cos(baseA - phi), tipY + head*Math.sin(baseA - phi));
-        ctx.stroke();
-      }
-
-      if (Math.abs(node.F) > 1e-12) {
-        const up = node.F > 0;
-        const base = 16, extra = 34;
-        const len = (maxAbsF && maxAbsF > 0) ? base + extra * (Math.abs(node.F) / maxAbsF) : base + extra * 0.6;
-        const tail = y + (up ? 10 : -10);
-        const tip  = y + (up ? -len :  len);
-        ctx.beginPath(); ctx.moveTo(x, tail); ctx.lineTo(x, tip); ctx.stroke();
-        ctx.beginPath();
-        if (up) { ctx.moveTo(x - 7, tip + 8); ctx.lineTo(x, tip); ctx.lineTo(x + 7, tip + 8); }
-        else    { ctx.moveTo(x - 7, tip - 8); ctx.lineTo(x, tip); ctx.lineTo(x + 7, tip - 8); }
-        ctx.closePath(); ctx.fill();
-      }
-      if (Number.isFinite(node.w0) && Math.abs(node.w0) > 1e-12) { const above = node.w0 > 0; const yy = y + (above ? -26 : 26); ctx.beginPath(); ctx.moveTo(x-10, yy); ctx.lineTo(x+10, yy); ctx.stroke(); }
-      if (Number.isFinite(node.th0) && Math.abs(node.th0) > 1e-12) { const cw = node.th0 > 0; ctx.beginPath(); ctx.arc(x+26, y, 10, 0.1*Math.PI, 1.4*Math.PI, !cw); ctx.stroke(); }
-      ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.font = '12px sans-serif'; let offsetY = y + 46;
-      if (Math.abs(node.F) > 1e-6) { ctx.fillText(`F: ${node.F}`, x, offsetY); offsetY += 14; }
-      if (Math.abs(node.Kv) > 1e-6){ ctx.fillText(`Kv: ${node.Kv}`, x, offsetY); offsetY += 14; }
-      if (Math.abs(node.Km) > 1e-6){ ctx.fillText(`Km: ${node.Km}`, x, offsetY); offsetY += 14; }
-      if (Math.abs(node.M) > 1e-6) { ctx.fillText(`M: ${node.M}`, x, offsetY); offsetY += 14; }
-      if (Number.isFinite(node.w0)) { ctx.fillText(`w₀: ${node.w0}`, x, offsetY); offsetY += 14; }
-      if (Number.isFinite(node.th0)) { ctx.fillText(`θ₀: ${node.th0}`, x, offsetY); offsetY += 14; }
-    }
-
-    // Canvas picking
-    const beamCanvas = document.getElementById('beamCanvas');
-    beamCanvas.addEventListener('click', (e)=>{
-      if (segments.length===0) return;
-      const rect = beamCanvas.getBoundingClientRect(); const xClick = e.clientX - rect.left; const yClick = e.clientY - rect.top;
-      const margin = 50; const totalLength = segments.reduce((s,seg)=>s+seg.L,0); const scaleX = (beamCanvas.width - 2*margin) / totalLength; const midY = Math.round(beamCanvas.height*0.35);
-      const nodeXs = [margin]; let accX = margin; for (let i=0;i<segments.length;i++){ accX += segments[i].L*scaleX; nodeXs.push(accX); }
-      for (let i=0;i<nodes.length;i++){ const dx = xClick - nodeXs[i]; const dy = yClick - midY; if (Math.hypot(dx,dy) < 20){ editNode(i); return; } }
-      accX = margin; for (let i=0;i<segments.length;i++){ const w = segments[i].L*scaleX; if (xClick>=accX && xClick<=accX+w && Math.abs(yClick - midY) <= 18){ editSegment(i); return; } accX += w; }
-    });
-
-    // -------------------- Analysis --------------------
-    function beamElementStiffness(E, I, L) {
-      const EI = E * I, L2 = L * L, L3 = L2 * L;
-      return [
-        [ 12*EI/L3,   6*EI/L2, -12*EI/L3,   6*EI/L2 ],
-        [  6*EI/L2,   4*EI/L,   -6*EI/L2,   2*EI/L  ],
-        [-12*EI/L3,  -6*EI/L2,  12*EI/L3,  -6*EI/L2 ],
-        [  6*EI/L2,   2*EI/L,   -6*EI/L2,   4*EI/L  ]
-      ];
-    }
-
-    let dispChart=null, momentChart=null, shearChart=null, stressChart=null;
-    function clearPlot(chartRef, canvasId){ if (chartRef) { try{ chartRef.destroy(); } catch(_){} } const cv = document.getElementById(canvasId); if (cv){ const c=cv.getContext('2d'); c.clearRect(0,0,cv.width,cv.height);} return null; }
-    function clearAllPlots(){ dispChart=clearPlot(dispChart,'dispPlot'); momentChart=clearPlot(momentChart,'momentPlot'); shearChart=clearPlot(shearChart,'shearPlot'); stressChart=clearPlot(stressChart,'stressPlot'); }
-
-    function solveBeam(){
-      clearAllPlots(); lastU = null; elementForces = null; K_global = null;
-      const n = nodes.length; if (n<2) { Swal.fire('Error','Build the beam first.','error'); return; }
-
-      const map = buildDOFMap(); const dof = map.ndof;
-      const K = Array(dof).fill().map(()=>Array(dof).fill(0));
-      const F = Array(dof).fill(0);
-
-      // Assemble
-      for (let e=0; e<segments.length; e++){
-        const {E,I,L} = segments[e]; const k = beamElementStiffness(E,I,L);
-        const i = e, j = e+1;
-        const wi = map.idxW[i]; const wj = map.idxW[j];
-        const thi = map.thRight[i]; const thj = map.thLeft[j];
-        const dofs = [wi, thi, wj, thj];
-        for (let r=0;r<4;r++) for (let c=0;c<4;c++) K[dofs[r]][dofs[c]] += k[r][c];
-      }
-
-      // Nodal loads & springs
-      for (let i=0;i<n;i++){
-        const wi = map.idxW[i]; F[wi] += nodes[i].F || 0; if (nodes[i].Kv) K[wi][wi] += nodes[i].Kv;
-        const hinge = isHinge(nodes[i]);
-        if (!hinge && (nodes[i].Km||0) > 0){
-          const r = (typeof map.thLeft[i]==='number') ? map.thLeft[i] : map.thRight[i]; if (typeof r==='number') K[r][r] += nodes[i].Km;
-        }
-        const M = nodes[i].M || 0; if (Math.abs(M)>0){
-          if (!hinge){ const r = (typeof map.thLeft[i]==='number') ? map.thLeft[i] : map.thRight[i]; if (typeof r==='number') F[r] += M; }
-          else { if (typeof map.thLeft[i] === 'number') F[map.thLeft[i]] += M/2; if (typeof map.thRight[i] === 'number') F[map.thRight[i]] += M/2; }
-        }
-      }
-
-      // Distributed loads -> consistent nodal loads
-      for (let e = 0; e < segments.length; e++){
-        const feq = consistentLoadVector(e);
-        const i = e, j = e+1;
-        const wi = map.idxW[i], wj = map.idxW[j];
-        const thi = map.thRight[i], thj = map.thLeft[j];
-        F[wi] += feq[0]; if (typeof thi === 'number') F[thi] += feq[1];
-        F[wj] += feq[2]; if (typeof thj === 'number') F[thj] += feq[3];
-      }
-
-      // Dirichlet constraints
-      const knownIdx = []; const knownVal = [];
-      for (let i=0;i<n;i++){
-        const bc = nodes[i].bc;
-        if (bc === 'fixed'){
-          knownIdx.push(map.idxW[i]); knownVal.push(0);
-          const rL = map.thLeft[i]; const rR = map.thRight[i]; if (typeof rL==='number'){ knownIdx.push(rL); knownVal.push(0);} if (typeof rR==='number' && rR!==rL){ knownIdx.push(rR); knownVal.push(0);} 
-        } else if (bc === 'pinned'){
-          knownIdx.push(map.idxW[i]); knownVal.push(0); // θ free
-        }
-        if (Number.isFinite(nodes[i].w0)) { const idx = map.idxW[i]; const p = knownIdx.indexOf(idx); if (p>=0) knownVal[p]=nodes[i].w0; else { knownIdx.push(idx); knownVal.push(nodes[i].w0);} }
-        if (Number.isFinite(nodes[i].th0)) {
-          const rL = map.thLeft[i]; const rR = map.thRight[i];
-          if (typeof rL==='number'){ const p=knownIdx.indexOf(rL); if (p>=0) knownVal[p]=nodes[i].th0; else { knownIdx.push(rL); knownVal.push(nodes[i].th0);} }
-          if (typeof rR==='number' && rR!==rL){ const p=knownIdx.indexOf(rR); if (p>=0) knownVal[p]=nodes[i].th0; else { knownIdx.push(rR); knownVal.push(nodes[i].th0);} }
-        }
-      }
-      const mapKV = new Map(); for (let k=0;k<knownIdx.length;k++) mapKV.set(knownIdx[k], knownVal[k]);
-      const kIdx = Array.from(mapKV.keys()).sort((a,b)=>a-b); const kVal = kIdx.map(i=>mapKV.get(i));
-      const allIdx = [...Array(K.length).keys()]; const uIdx = allIdx.filter(i=>!kIdx.includes(i)); if (uIdx.length===0){ Swal.fire('Error','All DOFs are constrained — system is singular (mechanism).','error'); return; }
-
-      const Kuu = uIdx.map(r=>uIdx.map(c=>K[r][c])); const Kuk = uIdx.map(r=>kIdx.map(c=>K[r][c])); const Fu = uIdx.map(r=>F[r]); const rhs = numeric.sub(Fu, numeric.dot(Kuk, kVal));
-      try{
-        const uu = numeric.solve(Kuu, rhs); const u = Array(K.length).fill(0); uIdx.forEach((d,i)=>u[d]=uu[i]); kIdx.forEach((d,i)=>u[d]=kVal[i]);
-        lastU = { u, map }; K_global = K; plotDisplacement(u, map); elementForces = computeElementForces(u, map); drawBeam();
-        plotMoment(); plotShearFromMoment(); plotBendingStress();
-      }catch(e){
-        Swal.fire('Mechanism or insufficient restraints', 'The system matrix is singular. This often happens with simply supported ends and an internal hinge with only nodal loading.', 'warning');
-      }
-    }
-
-    // Internal element forces for plotting (equilibrium sign)
-    function computeElementForces(u, map){
-      const res = [];
-      for (let e=0; e<segments.length; e++){
-        const {E,I,L} = segments[e];
-        const k = beamElementStiffness(E,I,L);
-        const wi = map.idxW[e], thi = map.thRight[e], wj = map.idxW[e+1], thj = map.thLeft[e+1];
-        const ue = [ u[wi], u[thi], u[wj], u[thj] ];
-        const fe = numeric.dot(k, ue); // from stiffness
-        const feq = consistentLoadVector(e); // distributed load contribution (linear q)
-        const ftotal = numeric.sub(fe, feq); // internal end forces
-        res.push({ V1: -ftotal[0], M1: -ftotal[1], V2: -ftotal[2], M2: -ftotal[3], L });
-      }
-      return res;
-    }
-
-    // -------------------- Plotting --------------------
-    function plotDisplacement(u, map){
-      const pts=[]; let xTot=0;
-      for (let e=0;e<segments.length;e++){
-        const L = segments[e].L; const wi=map.idxW[e], thi=map.thRight[e], wj=map.idxW[e+1], thj=map.thLeft[e+1];
-        const u1=u[wi], th1=u[thi], u2=u[wj], th2=u[thj];
-        const numPts=20; const start=(e===0)?0:1;
-        for (let j=start;j<=numPts;j++){
-          const xi=(j/numPts)*L, r=xi/L;
-          const h1=1-3*r*r+2*r*r*r, h2=xi*(1-2*r+r*r), h3=3*r*r-2*r*r*r, h4=xi*(r*r-r);
-          const w = h1*u1 + h2*th1 + h3*u2 + h4*th2;
-          pts.push({ x: xTot+xi, y: w });
-        }
-        xTot += L;
-      }
-      const ctx = document.getElementById('dispPlot').getContext('2d'); if (dispChart) dispChart.destroy();
-      dispChart = new Chart(ctx, {
-        type:'line',
-        data:{ datasets:[{ label:'Deflection', data:pts, parsing:false, borderWidth:2, fill:false, pointRadius:0 }]},
-        options:{
-          responsive:false,
-          scales:{
-            x:{ type:'linear', title:{display:true, text:'x-position'}, ticks:{ callback:(v)=>fmtSig3(v) } },
-            y:{ title:{display:true, text:'Deflection (up +)'}, ticks:{ callback:(v)=>fmtSig3(v) } }
-          }
-        }
-      });
-    }
-
-    function plotMoment(){
-      if (!elementForces) { Swal.fire('Error','Please solve the beam first.'); return; }
-      const pts=[]; let xBase=0;
-      for (let i=0;i<elementForces.length;i++){
-        const ef = elementForces[i]; const L = ef.L; const seg = segments[i]; const qw = - (seg.wd || 0) * (seg.A || 0); const qL = (seg.qL || 0) + qw; const qR = (seg.qR || 0) + qw; const dq = qR - qL;
-        const samples = 48; const start=(i===0)?0:1; // avoid double-plot at shared nodes
-        for (let j=start;j<=samples;j++){
-          const xi = (j/samples)*L;
-          const M_right = -ef.M2;
-          const integral = ef.V1*(L - xi) - 0.5*qL*(L*L - xi*xi) - (dq/(6*L))*(L*L*L - xi*xi*xi);
-          const M = M_right + integral;
-          pts.push({ x:xBase + xi, y:M });
-        }
-        xBase += L;
-      }
-      const ctx = document.getElementById('momentPlot').getContext('2d'); if (momentChart) momentChart.destroy();
-      momentChart = new Chart(ctx,{
-        type:'line',
-        data:{ datasets:[{ label:'Bending Moment (internal)', data:pts, parsing:false, borderWidth:2, fill:false, pointRadius:2, tension:0 }]},
-        options:{
-          responsive:false,
-          scales:{
-            x:{ type:'linear', title:{display:true, text:'x-position'}, ticks:{ callback:(v)=>fmtSig3(v) } },
-            y:{ title:{display:true, text:'Moment'}, ticks:{ callback:(v)=>fmtSig3(v) } }
-          }
-        }
-      });
-    }
-
-    function plotShearFromMoment(){
-      if (!elementForces) { Swal.fire('Error','Please solve the beam first.'); return; }
-      const pts=[]; let xBase=0;
-      for (let i=0;i<elementForces.length;i++){
-        const ef = elementForces[i]; const L = ef.L; const seg = segments[i]; const qw = - (seg.wd || 0) * (seg.A || 0); const qL = (seg.qL || 0) + qw; const qR = (seg.qR || 0) + qw; const dq = qR - qL;
-        const samples = 24; const start=(i===0)?0:1;
-        for (let j=start;j<=samples;j++){
-          const xi = (j/samples)*L;
-          const V  = ef.V1 - ( qL*xi + (dq*xi*xi)/(2*L) );
-          pts.push({ x:xBase + xi, y:V });
-        }
-        xBase += L;
-      }
-      const ctx = document.getElementById('shearPlot').getContext('2d'); if (shearChart) shearChart.destroy();  
-      shearChart = new Chart(ctx,{
-        type:'line',
-        data:{ datasets:[{ label:'Shear Force (internal)', data:pts, parsing:false, borderWidth:2, fill:false, pointRadius:2, tension:0 }]},
-        options:{
-          responsive:false,
-          scales:{
-            x:{ type:'linear', title:{display:true, text:'x-position'}, ticks:{ callback:(v)=>fmtSig3(v) } },
-            y:{ title:{display:true, text:'Shear'}, ticks:{ callback:(v)=>fmtSig3(v) } }
-          }
-        }
-      });
-    }
-
-    function plotBendingStress(){
-      if (!elementForces) { Swal.fire('Error','Please solve the beam first.'); return; }
-      const ptsTop=[]; const ptsBot=[]; let xBase=0;
-      for (let i=0;i<elementForces.length;i++){
-        const ef = elementForces[i]; const L = ef.L; const { St, Sb } = segments[i]; const seg = segments[i]; const qw = - (seg.wd || 0) * (seg.A || 0); const qL = (seg.qL || 0) + qw; const qR = (seg.qR || 0) + qw; const dq = qR - qL;
-        const hasTop = Number.isFinite(St) && Math.abs(St) > 1e-12;
-        const hasBot = Number.isFinite(Sb) && Math.abs(Sb) > 1e-12;
-        const samples = 48; const start=(i===0)?0:1;
-        for (let j=start;j<=samples;j++){
-          const xi = (j/samples)*L;
-          const M_right = -ef.M2; const integral = ef.V1*(L - xi) - 0.5*qL*(L*L - xi*xi) - (dq/(6*L))*(L*L*L - xi*xi*xi);
-          const M = M_right + integral;
-          if (hasTop) ptsTop.push({ x:xBase + xi, y: -M / St });
-          if (hasBot) ptsBot.push({ x:xBase + xi, y:  M / Sb });
-        }
-        xBase += L;
-      }
-      const ctx = document.getElementById('stressPlot').getContext('2d'); if (stressChart) stressChart.destroy();
-      const datasets = [];
-      if (ptsTop.length) datasets.push({ label:'Top stress', data: ptsTop, parsing:false, borderWidth:2, fill:false, pointRadius:2, tension:0 });
-      if (ptsBot.length) datasets.push({ label:'Bottom stress', data: ptsBot, parsing:false, borderWidth:2, fill:false, pointRadius:2, tension:0 });
-      stressChart = new Chart(ctx,{
-        type:'line',
-        data:{ datasets },
-        options:{
-          responsive:false,
-          scales:{
-            x:{ type:'linear', title:{display:true, text:'x-position'}, ticks:{ callback:(v)=>fmtSig3(v) } },
-            y:{ title:{display:true, text:'Stress (tension positive)'}, ticks:{ callback:(v)=>fmtSig3(v) } }
-          }
-        }
-      });
-    }
-
-    // Consistent load vector for linear q(x) using 3-pt Gauss integration
-    function consistentLoadVector(e){
-      const seg = segments[e]; const L = seg.L;
-      const qw = - (seg.wd || 0) * (seg.A || 0); // self-weight (down)
-      const qL = (seg.qL || 0) + qw; // effective linear q(x)
-      const qR = (seg.qR || 0) + qw;
-      const gauss = [ {t:-Math.sqrt(3/5), w:5/9}, {t:0, w:8/9}, {t:Math.sqrt(3/5), w:5/9} ];
-      const feq = [0,0,0,0];
-      for (const g of gauss){
-        const t=g.t, w=g.w; const x=(t+1)*L/2; const r=x/L; const J=L/2;
-        const h1=1-3*r*r+2*r*r*r, h2=x*(1-2*r+r*r), h3=3*r*r-2*r*r*r, h4=x*(r*r-r);
-        const qx = qL + (qR - qL) * r; // combined q
-        feq[0] += w*J*h1*qx; feq[1] += w*J*h2*qx; feq[2] += w*J*h3*qx; feq[3] += w*J*h4*qx;
-      }
-      return feq;
-    }
-
-    // ------------- Discrete Catalog + Interpolation + Optimizer -------------
-    // Helper: build N linearly interpolated catalog rows between two endpoints
-    function interpolateCatalog(endpoints, N){
-      const [r0, r1] = endpoints;
-      const lerp = (a,b,t)=> a + (b - a)*t;
-      const safeLerp = (a,b,t)=>{
-        const aOK = Number.isFinite(a), bOK = Number.isFinite(b);
-        if (!aOK && !bOK) return undefined;
-        if (!aOK) return b;
-        if (!bOK) return a;
-        return lerp(a,b,t);
-      };
-      const out = [];
-      for (let k=0; k<N; k++){
-        const t = (N===1)? 0 : (k/(N-1)); // include endpoints
-        out.push({
-          name: `${r0.name}-${r1.name}-${k+1}`,
-          I:    lerp(r0.I,  r1.I,  t),
-          St:   lerp(r0.St, r1.St, t),
-          Sb:   lerp(r0.Sb, r1.Sb, t),
-          A:    safeLerp(r0.A,  r1.A,  t),
-          wd:   safeLerp(r0.wd, r1.wd, t),
+        labels.forEach(l => {
+            const tex = createTextTexture(l.text, l.color);
+            const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(labelSize, labelSize), mat);
+            mesh.position.set(...l.pos);
+            mesh.rotation.x = -Math.PI/2;
+            compassGroup.add(mesh);
         });
-      }
-      return out;
-    }
 
-    // Helper: parse CSV from the Catalog textarea
-    function parseCatalogCSV(raw){
-      const lines = raw.split(/\r?\n/).filter(s=>s.trim().length>0);
-      if (!lines.length) throw new Error('Empty input.');
-      const header = lines[0].split(',').map(s=>s.trim().toLowerCase());
-      const need = ['name','i','st','sb'];
-      for (const k of need) if (!header.includes(k)) throw new Error('Header must include name,I,St,Sb');
-      const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
-      const rows=[];
-      for (let i=1;i<lines.length;i++){
-        const cols = lines[i].split(',').map(s=>s.trim());
-        if (!cols.length || !cols[0]) continue;
-        const name = cols[idx['name']];
-        const I  = parseFloat(cols[idx['i']]);
-        const St = parseFloat(cols[idx['st']]);
-        const Sb = parseFloat(cols[idx['sb']]);
-        const A  = idx['a']  !== undefined && cols[idx['a']]  !== '' ? parseFloat(cols[idx['a']])  : undefined;
-        const wd = idx['wd'] !== undefined && cols[idx['wd']] !== '' ? parseFloat(cols[idx['wd']]) : undefined;
-        if (!(name && Number.isFinite(I) && Number.isFinite(St) && Number.isFinite(Sb))) {
-          throw new Error(`Bad row ${i}: need name,I,St,Sb`);
+        compassGroup.add(nLine);
+        compassGroup.add(arrowHead);
+        compassGroup.add(ewLine);
+        compassGroup.add(sLine);
+        
+        compassGroup.position.set(-35, 0, 35); 
+        scene.add(compassGroup);
+
+        buildHouse();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
         }
-        rows.push({ name, I, St, Sb, ...(A!==undefined? {A}:{}), ...(wd!==undefined? {wd}:{} ) });
-      }
-      if (!rows.length) throw new Error('No valid rows found.');
-      return rows;
-    }
+        animate();
 
-    function openSectionsCatalog(){
-      const toCSV = (rows)=>[
-        'name,I,St,Sb,A,wd',
-        ...rows.map(r => [r.name, r.I, r.St, r.Sb, r.A ?? '', r.wd ?? ''].join(','))
-      ].join('\n');
+        const handleResize = () => {
+            if (!mountRef.current) return;
+            const newWidth = mountRef.current.clientWidth;
+            camera.aspect = newWidth / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(newWidth, height);
+        };
+        window.addEventListener('resize', handleResize);
 
-      Swal.fire({
-        title: 'Sections Catalog (up to 10)',
-        html: `
-          <div class="hint" style="margin-bottom:6px;">
-            CSV columns: <code>name,I,St,Sb,A,wd</code> — <b>A</b> & <b>wd</b> optional.
-          </div>
-          <textarea id="catText" style="width:520px;height:220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"></textarea>
-          <div style="margin-top:8px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <label style="display:inline-flex; align-items:center; gap:8px;">
-              <input id="interpToggle" type="checkbox">
-              <span>Generate N interpolated sets from 2 endpoints</span>
-            </label>
-            <label style="display:inline-flex; align-items:center; gap:6px;">
-              N: <input id="interpN" type="number" min="2" max="10" value="10" style="width:70px; height:28px; padding:0 8px;">
-            </label>
-            <button id="previewBtn" type="button" style="height:28px; padding:0 10px; border-radius:6px; border:1px solid #99c; background:#eef;">Preview</button>
-          </div>
-          <div class="hint" style="margin-top:4px;">
-            With the option checked and exactly two rows, the app linearly interpolates <code>I, St, Sb</code> (and <code>A, wd</code> when both endpoints define them).
-          </div>
-        `,
-        didOpen: ()=>{
-          document.getElementById('catText').value = toCSV(sectionsCatalog);
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-          // Preview handler
-          document.getElementById('previewBtn').addEventListener('click', ()=>{
-            const raw = document.getElementById('catText').value.trim();
-            const useInterp = !!document.getElementById('interpToggle').checked;
-            const N = Math.max(2, Math.min(10, parseInt(document.getElementById('interpN').value || '10', 10)));
-            try{
-              let rows = parseCatalogCSV(raw);
-              if (useInterp){
-                if (rows.length !== 2) throw new Error('Interpolation preview requires exactly 2 rows.');
-                rows = interpolateCatalog(rows, N);
-              } else {
-                rows = rows.slice(0, 10);
-              }
+        function onMouseClick(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-              // Sort by capacity (min St,Sb) for monotonic optimizer steps
-              rows.sort((a,b)=> Math.min(a.St,a.Sb) - Math.min(b.St,b.Sb));
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(Object.values(wallMeshesRef.current));
 
-              // Show charts
-              Swal.fire({
-                title: 'Interpolated Catalog Preview',
-                html: `
-                  <div style="display:grid; grid-template-columns:1fr; gap:10px; width:min(680px, 90vw);">
-                    <div><canvas id="chartS" width="640" height="240"></canvas></div>
-                    <div><canvas id="chartI" width="640" height="240"></canvas></div>
-                  </div>
-                `,
-                didOpen: ()=>{
-                  const labels = rows.map((r,i)=> (r.name || `S${i+1}`));
-                  const Sts = rows.map(r=>r.St);
-                  const Sbs = rows.map(r=>r.Sb);
-                  const Is  = rows.map(r=>r.I);
-
-                  const ctxS = document.getElementById('chartS').getContext('2d');
-                  new Chart(ctxS, {
-                    type:'line',
-                    data:{ labels, datasets:[
-                      { label:'St (top)', data:Sts, borderWidth:2, fill:false, pointRadius:2, tension:0 },
-                      { label:'Sb (bottom)', data:Sbs, borderWidth:2, fill:false, pointRadius:2, tension:0 }
-                    ]},
-                    options:{ responsive:false, scales:{ y:{ title:{display:true, text:'Section modulus S'} } } }
-                  });
-
-                  const ctxI = document.getElementById('chartI').getContext('2d');
-                  new Chart(ctxI, {
-                    type:'line',
-                    data:{ labels, datasets:[
-                      { label:'I', data:Is, borderWidth:2, fill:false, pointRadius:2, tension:0 }
-                    ]},
-                    options:{ responsive:false, scales:{ y:{ title:{display:true, text:'Moment of inertia I'} } } }
-                  });
-                },
-                showConfirmButton: true,
-                confirmButtonText: 'Close'
-              });
-            }catch(err){
-              Swal.fire('Preview error', err.message || String(err), 'error');
+            if (intersects.length > 0) {
+                let target = intersects[0].object;
+                while (target.parent && !target.userData.wallId) { target = target.parent; }
+                if (target.userData.wallId) setSelectedWall(target.userData.wallId);
             }
-          });
-        },
-        preConfirm: ()=>{
-          const raw = document.getElementById('catText').value.trim();
-          const useInterp = !!document.getElementById('interpToggle').checked;
-          const N = Math.max(2, Math.min(10, parseInt(document.getElementById('interpN').value || '10', 10)));
-          try{
-            let rowsOut = parseCatalogCSV(raw);
-            if (useInterp){
-              if (rowsOut.length !== 2) throw new Error('Interpolation mode requires exactly 2 rows.');
-              rowsOut = interpolateCatalog(rowsOut, N);
+        }
+
+        renderer.domElement.addEventListener('click', onMouseClick);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            renderer.domElement.removeEventListener('click', onMouseClick);
+            mountRef.current?.removeChild(renderer.domElement);
+            renderer.dispose();
+        };
+    }, [viewMode]);
+
+    useEffect(() => {
+        if (!sceneRef.current || !sunLightRef.current || !ambientLightRef.current) return;
+
+        if (timeOfDay === 'day') {
+            sceneRef.current.background = new THREE.Color(0x87ceeb);
+            ambientLightRef.current.intensity = sunVisible ? 0.6 : 0.4;
+            sunLightRef.current.intensity = sunVisible ? 0.9 : 0.2;
+            sunLightRef.current.color.setHex(0xffffff);
+            const latRad = latitude * (Math.PI / 180);
+            const sunDist = 100;
+            const sunY = Math.cos(latRad) * sunDist;
+            const sunZ = Math.sin(latRad) * sunDist;
+            sunLightRef.current.position.set(20, sunY, sunZ);
+        } else {
+            sceneRef.current.background = new THREE.Color(0x050520);
+            ambientLightRef.current.intensity = 0.2;
+            sunLightRef.current.intensity = nightCondition === 'clear' ? 0.3 : 0.1;
+            sunLightRef.current.color.setHex(0xaaccff);
+            sunLightRef.current.position.set(20, 60, 20);
+        }
+    }, [timeOfDay, sunVisible, latitude, nightCondition, viewMode]);
+
+    useEffect(() => {
+        if (viewMode === '3d') buildHouse();
+    }, [dimensions, numStories, wallInsulation, wallExterior, roofMaterial, wallFeatures]);
+
+    const buildHouse = () => {
+        if (!sceneRef.current) return;
+        Object.values(wallMeshesRef.current).forEach(mesh => sceneRef.current.remove(mesh));
+        roofMeshesRef.current.forEach(mesh => sceneRef.current.remove(mesh));
+        sceneRef.current.children = sceneRef.current.children.filter(c => 
+            c.type !== 'Mesh' || (c.geometry.type === 'PlaneGeometry' && c.rotation.x === -Math.PI/2) || (c.geometry.type === 'BoxGeometry' && c.scale.y === 0.5) || c.type === 'Group' || c.type === 'Line'
+        );
+
+        wallMeshesRef.current = {};
+        roofMeshesRef.current = [];
+        const wallThickness = 0.5;
+        
+        floors.forEach((floor, floorIndex) => {
+            const floorY = (floorIndex - 1) * WALL_HEIGHT;
+            const isBasement = floor === 'basement';
+
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(dimensions.length, 0.5, dimensions.width), new THREE.MeshStandardMaterial({ color: 0x8b7355 }));
+            floorMesh.position.set(0, floorY, 0);
+            floorMesh.castShadow = true;
+            floorMesh.receiveShadow = true;
+            sceneRef.current.add(floorMesh);
+            roofMeshesRef.current.push(floorMesh);
+
+            const directions = [
+                { id: 'north', pos: [0, floorY + WALL_HEIGHT / 2, -dimensions.width / 2], dim: [dimensions.length, WALL_HEIGHT, wallThickness] },
+                { id: 'south', pos: [0, floorY + WALL_HEIGHT / 2, dimensions.width / 2], dim: [dimensions.length, WALL_HEIGHT, wallThickness] },
+                { id: 'east', pos: [dimensions.length / 2, floorY + WALL_HEIGHT / 2, 0], dim: [wallThickness, WALL_HEIGHT, dimensions.width] },
+                { id: 'west', pos: [-dimensions.length / 2, floorY + WALL_HEIGHT / 2, 0], dim: [wallThickness, WALL_HEIGHT, dimensions.width] },
+            ];
+
+            directions.forEach(dir => {
+                const wallId = `${floor}-${dir.id}`;
+                const exterior = getWallExterior(wallId);
+                let material = isBasement ? 
+                    new THREE.MeshPhysicalMaterial({ color: 0x708090, transparent: true, opacity: 0.7, roughness: 0.5, metalness: 0.1 }) : 
+                    new THREE.MeshStandardMaterial({ color: exterior.color });
+
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dir.dim), material);
+                mesh.position.set(...dir.pos);
+                mesh.castShadow = !isBasement;
+                mesh.receiveShadow = true;
+                mesh.userData.wallId = wallId;
+                sceneRef.current.add(mesh);
+                wallMeshesRef.current[wallId] = mesh;
+
+                const features = wallFeatures[wallId] || [];
+                const wallWidth = dir.id === 'north' || dir.id === 'south' ? dimensions.length : dimensions.width;
+                const spacing = wallWidth / (features.length + 1);
+
+                features.forEach((feature, idx) => {
+                    const stats = FEATURE_STATS[feature.type];
+                    const featureGeom = new THREE.BoxGeometry(
+                        dir.id === 'north' || dir.id === 'south' ? stats.width : wallThickness + 0.2, 
+                        stats.height, 
+                        dir.id === 'north' || dir.id === 'south' ? wallThickness + 0.2 : stats.width
+                    );
+                    const featureMat = new THREE.MeshStandardMaterial({ color: stats.color, roughness: 0.2, metalness: 0.8 });
+                    const featureMesh = new THREE.Mesh(featureGeom, featureMat);
+                    const offset = -wallWidth/2 + (spacing * (idx + 1));
+                    let fx = 0, fz = 0;
+                    const yOffset = feature.type.includes('door') ? (-WALL_HEIGHT/2 + stats.height/2) : 0; 
+                    if (dir.id === 'north') { fx = offset; fz = 0; }
+                    if (dir.id === 'south') { fx = -offset; fz = 0; } 
+                    if (dir.id === 'east')  { fx = 0; fz = -offset; }
+                    if (dir.id === 'west')  { fx = 0; fz = offset; }
+                    featureMesh.position.set(mesh.position.x + fx, mesh.position.y + yOffset, mesh.position.z + fz);
+                    sceneRef.current.add(featureMesh);
+                    roofMeshesRef.current.push(featureMesh);
+                });
+            });
+
+            const trim = new THREE.Mesh(new THREE.BoxGeometry(dimensions.length + 0.8, 0.4, dimensions.width + 0.8), new THREE.MeshStandardMaterial({ color: 0xFFFFFF }));
+            trim.position.set(0, floorY + WALL_HEIGHT, 0);
+            sceneRef.current.add(trim);
+            roofMeshesRef.current.push(trim);
+        });
+
+        const roofY = (floors.length - 1) * WALL_HEIGHT; 
+        const roofRise = (dimensions.width / 2) * ROOF_PITCH;
+        const roofMat = ROOF_MATERIALS.find(m => m.id === roofMaterial);
+        const roofColor = roofMat ? roofMat.color : 0x808080;
+        
+        const gableShape = new THREE.Shape();
+        gableShape.moveTo(-dimensions.width / 2, 0).lineTo(dimensions.width / 2, 0).lineTo(0, roofRise).lineTo(-dimensions.width / 2, 0);
+        const gableGeometry = new THREE.ShapeGeometry(gableShape);
+        const gableMaterial = new THREE.MeshStandardMaterial({ color: 0xE8E8E8, side: THREE.DoubleSide });
+        
+        const westGable = new THREE.Mesh(gableGeometry, gableMaterial);
+        westGable.position.set(-dimensions.length / 2, roofY, 0);
+        westGable.rotation.y = Math.PI / 2;
+        sceneRef.current.add(westGable);
+        roofMeshesRef.current.push(westGable);
+        
+        const eastGable = new THREE.Mesh(gableGeometry, gableMaterial);
+        eastGable.position.set(dimensions.length / 2, roofY, 0);
+        eastGable.rotation.y = -Math.PI / 2;
+        sceneRef.current.add(eastGable);
+        roofMeshesRef.current.push(eastGable);
+
+        const roofSlantLength = Math.sqrt(Math.pow(dimensions.width / 2, 2) + Math.pow(roofRise, 2));
+        const roofAngle = Math.atan2(roofRise, dimensions.width / 2);
+        const roofMaterialMesh = new THREE.MeshStandardMaterial({ color: roofColor, side: THREE.DoubleSide, roughness: 0.9 });
+        
+        const northRoof = new THREE.Mesh(new THREE.PlaneGeometry(dimensions.length + 1, roofSlantLength), roofMaterialMesh);
+        northRoof.position.set(0, roofY + roofRise / 2, -dimensions.width / 4);
+        northRoof.rotation.x = -Math.PI / 2 - roofAngle; 
+        sceneRef.current.add(northRoof);
+        roofMeshesRef.current.push(northRoof);
+
+        const southRoof = new THREE.Mesh(new THREE.PlaneGeometry(dimensions.length + 1, roofSlantLength), roofMaterialMesh.clone());
+        southRoof.position.set(0, roofY + roofRise / 2, dimensions.width / 4);
+        southRoof.rotation.x = -Math.PI / 2 + roofAngle;
+        sceneRef.current.add(southRoof);
+        roofMeshesRef.current.push(southRoof);
+    };
+
+    const getWallData = () => {
+        const walls = [];
+        floors.forEach(floor => {
+            const directions = ['north', 'south', 'east', 'west'];
+            directions.forEach(dir => {
+                const isLong = dir === 'north' || dir === 'south';
+                walls.push({ id: `${floor}-${dir}`, floor, orientation: dir, length: isLong ? dimensions.length : dimensions.width, height: WALL_HEIGHT, area: (isLong ? dimensions.length : dimensions.width) * WALL_HEIGHT });
+            });
+        });
+        return walls;
+    };
+
+    const addFeature = (type) => {
+        if (!selectedWall) return;
+        setWallFeatures(prev => {
+            const current = prev[selectedWall] || [];
+            return { ...prev, [selectedWall]: [...current, { type, id: Date.now() }] };
+        });
+    };
+
+    const removeFeature = (wallId, featureId) => {
+        setWallFeatures(prev => ({ ...prev, [wallId]: prev[wallId].filter(f => f.id !== featureId) }));
+    };
+
+    const handleMaterialSelect = (materialId) => {
+        if (selectionMode === 'exterior' && selectedWall) {
+            setWallExterior(prev => ({ ...prev, [selectedWall]: materialId }));
+        } else if (selectionMode === 'insulation' && selectedWall) {
+            setWallInsulation(prev => ({ ...prev, [selectedWall]: materialId }));
+        }
+    };
+
+    const getWallExterior = (wallId) => {
+        const exteriorId = wallExterior[wallId] || 'brick-red';
+        return EXTERIOR_MATERIALS.find(mat => mat.id === exteriorId) || EXTERIOR_MATERIALS[0];
+    };
+
+    const getWallInsulation = (wallId) => {
+        const insulationId = wallInsulation[wallId] || 'none';
+        return INSULATION_OPTIONS.find(opt => opt.id === insulationId);
+    };
+
+    const calculateHVAC = () => {
+        const walls = getWallData();
+        let totalLoad = 0;
+
+        walls.forEach(wall => {
+            const features = wallFeatures[wall.id] || [];
+            let featureArea = 0;
+            let featureLoad = 0;
+            
+            let tempDiff = 0;
+            if (hvacMode === 'heating') {
+                tempDiff = wall.floor === 'basement' ? (insideTemp - groundTemp) : (insideTemp - outsideTemp);
+            } else {
+                tempDiff = wall.floor === 'basement' ? (groundTemp - insideTemp) : (outsideTemp - insideTemp);
             }
-            rowsOut = rowsOut.slice(0, 10);
-            rowsOut.sort((a,b)=> Math.min(a.St,a.Sb) - Math.min(b.St,b.Sb));
-            return rowsOut;
-          }catch(err){
-            Swal.showValidationMessage(err.message || String(err));
-            return false;
-          }
-        },
-        showCancelButton: true,
-        confirmButtonText: 'Save'
-      }).then(res=>{
-        if (!res.value) return;
-        sectionsCatalog = res.value;
-        Swal.fire({icon:'success', title:'Catalog saved', timer:900, showConfirmButton:false});
-      });
-    }
+            tempDiff = Math.max(0, tempDiff);
 
-    function applySectionToSegment(seg, catIdx){
-      const s = sectionsCatalog[catIdx];
-      if (!s) return;
-      seg.I  = s.I;
-      seg.St = s.St;
-      seg.Sb = s.Sb;
-      if (s.A  !== undefined) seg.A  = s.A;
-      if (s.wd !== undefined) seg.wd = s.wd;
-      seg.secIndex = catIdx;
-    }
+            features.forEach(f => {
+                const stats = FEATURE_STATS[f.type];
+                const area = stats.width * stats.height;
+                featureArea += area;
+                let uValue = 1 / stats.rValue;
+                if (hvacMode === 'heating' && timeOfDay === 'night' && nightCondition === 'clear') uValue *= 1.15; 
+                let load = area * uValue * tempDiff;
 
-    function measureSegmentMomentExtrema(){
-      if (!elementForces) return [];
-      const out=[];
-      for (let i=0;i<elementForces.length;i++){
-        const ef=elementForces[i], L=ef.L, seg=segments[i];
-        const qw = - (seg.wd || 0) * (seg.A || 0);
-        const qL = (seg.qL || 0) + qw, qR = (seg.qR || 0) + qw, dq = qR - qL;
-        let MposMax = -Infinity, MnegMin = Infinity;
-        const samples=96;
-        for (let j=0;j<=samples;j++){
-          const xi=(j/samples)*L;
-          const M_right=-ef.M2;
-          const M = M_right + ( ef.V1*(L - xi) - 0.5*qL*(L*L - xi*xi) - (dq/(6*L))*(L*L*L - xi*xi*xi) );
-          if (M > MposMax) MposMax = M;
-          if (M < MnegMin) MnegMin = M;
-        }
-        out.push({MposMax, MnegMin});
-      }
-      return out;
-    }
+                if (hvacMode === 'cooling' && f.type.includes('window') && timeOfDay === 'day' && sunVisible) {
+                    const SHGC = 0.5;
+                    let solarIntensity = 200;
+                    if (wall.orientation === 'east' || wall.orientation === 'west') solarIntensity *= 1.2;
+                    else if (wall.orientation === 'south') solarIntensity *= Math.sin(latitude * Math.PI/180);
+                    else if (wall.orientation === 'north') solarIntensity *= 0.2;
+                    load += (area * SHGC * solarIntensity);
+                } else if (hvacMode === 'heating' && f.type.includes('window') && timeOfDay === 'day' && sunVisible && wall.orientation === 'south') {
+                    const solarIntensity = 20 * Math.sin(latitude * Math.PI/180);
+                    load -= (area * solarIntensity);
+                }
+                featureLoad += load;
+            });
 
-    function measureSegmentStressExtrema(){
-      if (!elementForces) return [];
-      const out = [];
-      for (let i=0;i<segments.length;i++){
-        const ef = elementForces[i], L = ef.L, seg = segments[i];
-        const qw = - (seg.wd || 0) * (seg.A || 0);
-        const qL = (seg.qL || 0) + qw, qR = (seg.qR || 0) + qw, dq = qR - qL;
-        let sigMaxAbs = 0, sigTMax = 0, sigBMax = 0;
-        const St = seg.St, Sb = seg.Sb;
-        const samples = 96;
-        for (let j=0;j<=samples;j++){
-          const xi = (j/samples)*L;
-          const M_right = -ef.M2;
-          const M = M_right + ( ef.V1*(L - xi) - 0.5*qL*(L*L - xi*xi) - (dq/(6*L))*(L*L*L - xi*xi*xi) );
-          const sigTop = (Number.isFinite(St) && Math.abs(St)>1e-12) ? (-M/ St) : 0;
-          const sigBot = (Number.isFinite(Sb) && Math.abs(Sb)>1e-12) ? ( M/ Sb) : 0;
-          const m = Math.max(Math.abs(sigTop), Math.abs(sigBot));
-          if (m > sigMaxAbs) sigMaxAbs = m;
-          if (Math.abs(sigTop) > Math.abs(sigTMax)) sigTMax = sigTop;
-          if (Math.abs(sigBot) > Math.abs(sigBMax)) sigBMax = sigBot;
-        }
-        out.push({ sigMaxAbs, sigTMax, sigBMax });
-      }
-      return out;
-    }
+            const netWallArea = Math.max(0, wall.area - featureArea);
+            const insulation = getWallInsulation(wall.id);
+            let rValue = insulation.rValue + 3;
+            if (hvacMode === 'heating' && wall.floor !== 'basement' && wall.orientation === windDirection) rValue *= 0.85;
 
-    function optimizeSectionsDiscrete(){
-      if (!sectionsCatalog || sectionsCatalog.length === 0){
-        Swal.fire('Catalog needed','Please create a sections catalog first.','info'); return;
-      }
-      if (!lastU || !elementForces) { try { solveBeam(); } catch(_){} }
-      if (!lastU || !elementForces){ Swal.fire('Error','Solve the beam first.','error'); return; }
+            const wallLoad = (netWallArea / rValue) * tempDiff;
+            totalLoad += (wallLoad + featureLoad);
+        });
 
-      Swal.fire({
-        title: 'Optimize Sections (Discrete)',
-        html: `
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <label><span>σ_allow (absolute)</span><input id="sigAllowD" class="swal2-input" value="20000"></label>
-            <label><span>Max iterations</span><input id="maxIterD" class="swal2-input" value="40"></label>
-            <label><span>Over-limit tolerance</span><input id="tolOver" class="swal2-input" value="0.01"></label>
-            <label><span>Under-limit margin</span><input id="tolUnder" class="swal2-input" value="0.10"></label>
-          </div>
-          <hr style="margin:6px 0;">
-          <label style="gap:8px;"><span>Start with single catalog section for all segments</span>
-            <input id="singleStartD" type="checkbox" checked>
-          </label>
-          <div class="hint" style="margin-top:6px;">Heuristic: bump up if |σ| > σ_allow·(1+tolOver); try bumping down if |σ| < σ_allow·(1−tolUnder). Re-solves each step.</div>
-        `,
-        preConfirm: ()=>{
-          const v = id => parseFloat(document.getElementById(id).value);
-          const sigAllow = v('sigAllowD');
-          const maxIters = parseInt(document.getElementById('maxIterD').value);
-          const tolOver  = v('tolOver');
-          const tolUnder = v('tolUnder');
-          const singleStart = document.getElementById('singleStartD').checked;
-          if (!(sigAllow>0)) { Swal.showValidationMessage('σ_allow must be > 0'); return false; }
-          if (!(maxIters>=1)) { Swal.showValidationMessage('Max iterations must be ≥ 1'); return false; }
-          if (!(tolOver>=0 && tolUnder>=0)) { Swal.showValidationMessage('Tolerances must be ≥ 0'); return false; }
-          return { sigAllow, maxIters, tolOver, tolUnder, singleStart };
-        },
-        showCancelButton: true,
-        confirmButtonText: 'Run'
-      }).then(res=>{
-        if (!res.value) return;
-        runDiscreteOptimization(res.value);
-      });
-    }
-
-    function runDiscreteOptimization(cfg){
-      // Initial assignment
-      if (cfg.singleStart){
-        const ext = measureSegmentMomentExtrema();
-        let globalReqS = 0;
-        for (const e of ext){
-          globalReqS = Math.max(globalReqS, Math.abs(e.MposMax)/cfg.sigAllow, Math.abs(e.MnegMin)/cfg.sigAllow);
-        }
-        let k0 = sectionsCatalog.findIndex(s => (s.St >= globalReqS && s.Sb >= globalReqS));
-        if (k0 < 0) k0 = sectionsCatalog.length - 1;
-        for (let i=0;i<segments.length;i++) applySectionToSegment(segments[i], k0);
-      } else {
-        for (let i=0;i<segments.length;i++){
-          if (typeof segments[i].secIndex !== 'number'){
-            let best=0, bestErr=Infinity;
-            for (let k=0;k<sectionsCatalog.length;k++){
-              const s = sectionsCatalog[k];
-              const err = Math.abs(Math.log(((segments[i].St||1))/(s.St||1))) + Math.abs(Math.log(((segments[i].Sb||1))/(s.Sb||1)));
-              if (err < bestErr){ bestErr=err; best=k; }
+        const roofArea = dimensions.length * dimensions.width;
+        let effectiveAtticR = atticRValue;
+        if (hvacMode === 'heating' && timeOfDay === 'night' && nightCondition === 'clear') effectiveAtticR *= 0.8;
+        
+        let roofTempDiff = 0;
+        if (hvacMode === 'heating') {
+            roofTempDiff = Math.max(0, insideTemp - outsideTemp);
+        } else {
+            let effectiveOutside = outsideTemp;
+            if (timeOfDay === 'day' && sunVisible) {
+                const roofMat = ROOF_MATERIALS.find(m => m.id === roofMaterial);
+                const reflectivity = roofMat ? roofMat.reflectivity : 0.1;
+                effectiveOutside += (1 - reflectivity) * 50; 
             }
-            applySectionToSegment(segments[i], best);
-          }
+            roofTempDiff = Math.max(0, effectiveOutside - insideTemp);
         }
-      }
+        totalLoad += (roofArea / effectiveAtticR) * roofTempDiff;
 
-      let iter = 0;
-      for (; iter < cfg.maxIters; iter++){
-        try { solveBeam(); } catch(_) {}
-        if (!elementForces) { Swal.fire('Error','Solve failed during optimization.','error'); return; }
+        const volume = dimensions.length * dimensions.width * (floors.length * WALL_HEIGHT);
+        const acph = 0.5 + (windSpeed * 0.05);
+        const infiltrationLoad = volume * 0.018 * Math.abs(insideTemp - outsideTemp) * acph;
+        totalLoad += infiltrationLoad;
 
-        const sigs = measureSegmentStressExtrema();
-        let anyChange = false;
-
-        for (let i=0;i<segments.length;i++){
-          const seg = segments[i], sInfo = sigs[i];
-          const over  = sInfo.sigMaxAbs > cfg.sigAllow * (1 + cfg.tolOver);
-          const under = sInfo.sigMaxAbs < cfg.sigAllow * (1 - cfg.tolUnder);
-
-          let k = (typeof seg.secIndex === 'number') ? seg.secIndex : 0;
-
-          if (over && k < sectionsCatalog.length - 1){
-            k++;
-            applySectionToSegment(seg, k);
-            anyChange = true;
-          } else if (under && k > 0){
-            k--;
-            applySectionToSegment(seg, k);
-            anyChange = true;
-          }
+        if (hvacMode === 'cooling') {
+            const peopleLoad = occupants * 450;
+            const applianceLoad = appliances === 'high' ? 3000 : (appliances === 'medium' ? 1500 : 500);
+            totalLoad += peopleLoad + applianceLoad;
+            if (humidity > 50) {
+                const factor = 1 + ((humidity - 50) / 100);
+                totalLoad *= factor;
+            }
         }
 
-        if (!anyChange) break;
-      }
+        // Apply Furnace Efficiency
+        let finalRequired = totalLoad;
+        if (hvacMode === 'heating') {
+            finalRequired = totalLoad / (furnaceEfficiency / 100);
+        }
 
-      try { solveBeam(); } catch(_) {}
-      drawBeam();
-      plotBendingStress();
-    }
-    
-    // Simple CSV export function (since it was referenced in HTML but missing in JS)
-    function exportCSV() {
-      if(!elementForces || !segments.length) {
-         Swal.fire('No data', 'Please solve the beam first.', 'info');
-         return;
-      }
-      
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "Segment,L,E,I,St,Sb,qL,qR,wd,V_start,M_start,V_end,M_end\n";
-      
-      segments.forEach(function(seg, i) {
-          const ef = elementForces[i];
-          const row = [
-              i+1,
-              seg.L, seg.E, seg.I, seg.St, seg.Sb, seg.qL, seg.qR, seg.wd,
-              ef.V1, ef.M1, -ef.V2, -ef.M2
-          ].join(",");
-          csvContent += row + "\r\n";
-      });
+        return Math.max(0, Math.round(finalRequired));
+    };
 
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "beam_analysis.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-    
-    // Initialize on load
-    window.addEventListener('load', buildBeam);
-    
-  </script>
+    const finalLoad = calculateHVAC();
+    const displayValue = hvacMode === 'heating' ? finalLoad.toLocaleString() : (finalLoad / 12000).toFixed(2);
+    const displayUnit = hvacMode === 'heating' ? 'BTU/hr' : 'Tons';
+    const themeColor = hvacMode === 'heating' ? 'orange' : 'cyan';
+
+    const renderFloorPlan = () => {
+       const scale = 5;
+       return (
+            <svg width="100%" height={220 * floors.length} viewBox={`0 0 800 ${220 * floors.length}`} className="border border-gray-300 bg-white">
+                {floors.map((floor, floorIndex) => (
+                    <g key={floor} transform={`translate(50, ${50 + floorIndex * 220})`}>
+                        <text x={0} y={-10} fontSize="16" fontWeight="bold" className="uppercase">{floor} Floor</text>
+                        <rect x={0} y={0} width={dimensions.length * scale} height={20} fill={`#${getWallInsulation(`${floor}-north`).color.toString(16).padStart(6, '0')}`} stroke="#1f2937" strokeWidth="2" className="cursor-pointer hover:opacity-80" onClick={() => setSelectedWall(`${floor}-north`)} />
+                        <text x={dimensions.length * scale / 2} y={12} textAnchor="middle" fontSize="10" fill="#1f2937">N</text>
+                        <rect x={0} y={dimensions.width * scale - 20} width={dimensions.length * scale} height={20} fill={`#${getWallInsulation(`${floor}-south`).color.toString(16).padStart(6, '0')}`} stroke="#1f2937" strokeWidth="2" className="cursor-pointer hover:opacity-80" onClick={() => setSelectedWall(`${floor}-south`)} />
+                        <text x={dimensions.length * scale / 2} y={dimensions.width * scale - 8} textAnchor="middle" fontSize="10" fill="#1f2937">S</text>
+                        <rect x={0} y={20} width={20} height={dimensions.width * scale - 40} fill={`#${getWallInsulation(`${floor}-west`).color.toString(16).padStart(6, '0')}`} stroke="#1f2937" strokeWidth="2" className="cursor-pointer hover:opacity-80" onClick={() => setSelectedWall(`${floor}-west`)} />
+                        <text x={10} y={dimensions.width * scale / 2} textAnchor="middle" fontSize="10" fill="#1f2937">W</text>
+                        <rect x={dimensions.length * scale - 20} y={20} width={20} height={dimensions.width * scale - 40} fill={`#${getWallInsulation(`${floor}-east`).color.toString(16).padStart(6, '0')}`} stroke="#1f2937" strokeWidth="2" className="cursor-pointer hover:opacity-80" onClick={() => setSelectedWall(`${floor}-east`)} />
+                        <text x={dimensions.length * scale - 10} y={dimensions.width * scale / 2} textAnchor="middle" fontSize="10" fill="#1f2937">E</text>
+                        <rect x={20} y={20} width={dimensions.length * scale - 40} height={dimensions.width * scale - 40} fill="#f3f4f6" stroke="none" />
+                        <text x={dimensions.length * scale / 2} y={dimensions.width * scale + 20} textAnchor="middle" fontSize="12">{dimensions.length}' × {dimensions.width}'</text>
+                    </g>
+                ))}
+            </svg>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 p-2">
+            <div className="max-w-[950px] mx-auto">
+                <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className={`text-${themeColor}-600`}><HomeIcon /></div>
+                        <h1 className="text-3xl font-bold text-gray-900">Multi-Story House Builder & HVAC Calculator</h1>
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_300px] gap-4">
+                        {/* Left Column: 3D/Floor Plan */}
+                        <div>
+                            <div className="flex items-end gap-4 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">View Mode</label>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => setViewMode('3d')} className={`px-3 py-1 rounded text-sm font-medium transition-colors ${viewMode === '3d' ? `bg-${themeColor}-600 text-white` : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>3D</button>
+                                        <button onClick={() => setViewMode('floor')} className={`px-3 py-1 rounded text-sm font-medium transition-colors ${viewMode === 'floor' ? `bg-${themeColor}-600 text-white` : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>Plan</button>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Length (ft)</label>
+                                    <input type="number" value={dimensions.length} onChange={(e) => setDimensions(prev => ({ ...prev, length: parseInt(e.target.value) || 0 }))} className="w-24 px-2 py-1 text-sm border border-gray-300 rounded" min="10" max="100" />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Width (ft)</label>
+                                    <input type="number" value={dimensions.width} onChange={(e) => setDimensions(prev => ({ ...prev, width: parseInt(e.target.value) || 0 }))} className="w-24 px-2 py-1 text-sm border border-gray-300 rounded" min="10" max="100" />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Stories</label>
+                                    <select value={numStories} onChange={(e) => setNumStories(parseInt(e.target.value))} className="w-24 px-2 py-1 text-sm border border-gray-300 rounded bg-white">
+                                        <option value="1">1 Story</option>
+                                        <option value="2">2 Stories</option>
+                                        <option value="3">3 Stories</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="mb-6 flex justify-center w-full">
+                                {viewMode === '3d' ? (
+                                    <div className="w-full">
+                                        <div ref={mountRef} className={`h-[600px] w-full border-4 border-gray-300 rounded-lg ${hvacMode==='cooling'?'bg-cyan-50':'bg-blue-50'}`}></div>
+                                        <p className="text-xs text-gray-500 mt-2 text-center">Drag to rotate • Right-click to pan • Scroll to zoom</p>
+                                    </div>
+                                ) : (
+                                    <div className="w-full overflow-auto h-[600px] border-4 border-gray-300 rounded-lg p-4 bg-gray-50">
+                                        {renderFloorPlan()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right Column: HVAC Controls (Fixed Width) */}
+                        <div className="space-y-6">
+                            
+                            {/* HVAC CALCULATOR PANEL */}
+                            <div className={`bg-${themeColor}-50 border border-${themeColor}-200 rounded-lg p-5`}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className={`text-lg font-bold text-${themeColor}-900 flex items-center gap-2`}>
+                                        {hvacMode==='heating' ? <FireIcon/> : <SnowIcon/>} 
+                                        {hvacMode==='heating' ? 'Heating' : 'Cooling'}
+                                    </h3>
+                                    <div className="flex bg-white rounded border border-gray-300 overflow-hidden">
+                                        <button onClick={()=>setHvacMode('heating')} className={`px-3 py-1 text-xs font-bold ${hvacMode==='heating'?'bg-orange-500 text-white':'text-gray-600 hover:bg-gray-100'}`}>Heat</button>
+                                        <button onClick={()=>setHvacMode('cooling')} className={`px-3 py-1 text-xs font-bold ${hvacMode==='cooling'?'bg-cyan-500 text-white':'text-gray-600 hover:bg-gray-100'}`}>Cool</button>
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {/* SCENARIO TOGGLES */}
+                                    <div className={`flex bg-${themeColor}-200 rounded p-1 mb-2`}>
+                                        <button onClick={()=>setTimeOfDay('day')} className={`flex-1 flex items-center justify-center gap-1 py-1 text-xs font-bold rounded ${timeOfDay==='day' ? `bg-white text-${themeColor}-900 shadow` : `text-${themeColor}-800`}`}><SunIcon/> Day</button>
+                                        <button onClick={()=>setTimeOfDay('night')} className={`flex-1 flex items-center justify-center gap-1 py-1 text-xs font-bold rounded ${timeOfDay==='night' ? `bg-white text-blue-900 shadow` : `text-${themeColor}-800`}`}><MoonIcon/> Night</button>
+                                    </div>
+
+                                    {timeOfDay === 'day' ? (
+                                        <div className="bg-white p-2 rounded border border-gray-200 mb-2 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-semibold text-gray-700">Overhead Sun</span>
+                                                <input type="checkbox" checked={sunVisible} onChange={e=>setSunVisible(e.target.checked)} />
+                                            </div>
+                                            <div>
+                                                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-1">
+                                                    <span>Latitude</span>
+                                                    <span>{latitude}°</span>
+                                                </div>
+                                                <input type="range" min="0" max="90" value={latitude} onChange={e=>setLatitude(Number(e.target.value))} className="w-full" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white p-2 rounded border border-gray-200 mb-2">
+                                            <label className="block text-xs font-semibold text-gray-700 mb-1">Sky Condition</label>
+                                            <select value={nightCondition} onChange={e=>setNightCondition(e.target.value)} className="w-full text-xs p-1 border rounded">
+                                                <option value="clear">Clear (Radiant Loss)</option>
+                                                <option value="cloudy">Cloudy (Insulated)</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Outside °F</label><input type="number" value={outsideTemp} onChange={(e) => setOutsideTemp(Number(e.target.value))} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm`} /></div>
+                                        <div><label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Inside °F</label><input type="number" value={insideTemp} onChange={(e) => setInsideTemp(Number(e.target.value))} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm`} /></div>
+                                        <div><label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Ground °F</label><input type="number" value={groundTemp} onChange={(e) => setGroundTemp(Number(e.target.value))} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm`} /></div>
+                                        <div><label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Wind mph</label><input type="number" value={windSpeed} onChange={(e) => setWindSpeed(Number(e.target.value))} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm`} /></div>
+                                    </div>
+                                    
+                                    {/* COOLING EXTRAS */}
+                                    {hvacMode === 'cooling' && (
+                                        <div className="bg-white p-2 rounded border border-cyan-200 space-y-2">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div><label className="block text-xs font-bold text-gray-700">Humidity %</label><input type="number" value={humidity} onChange={e=>setHumidity(Number(e.target.value))} className="w-full p-1 border rounded text-xs"/></div>
+                                                <div><label className="block text-xs font-bold text-gray-700">Occupants</label><input type="number" value={occupants} onChange={e=>setOccupants(Number(e.target.value))} className="w-full p-1 border rounded text-xs"/></div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-700">Appliances</label>
+                                                <select value={appliances} onChange={e=>setAppliances(e.target.value)} className="w-full p-1 border rounded text-xs">
+                                                    <option value="low">Low (Basic)</option>
+                                                    <option value="medium">Medium (Typical)</option>
+                                                    <option value="high">High (Servers/Ovens)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Attic Insulation (R)</label>
+                                        <input type="number" value={atticRValue} onChange={(e) => setAtticRValue(Number(e.target.value))} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm`} />
+                                    </div>
+
+                                    <div>
+                                        <label className={`block text-xs font-semibold text-${themeColor}-800 mb-1`}>Wind Direction</label>
+                                        <select value={windDirection} onChange={(e) => setWindDirection(e.target.value)} className={`w-full px-2 py-1 border border-${themeColor}-200 rounded text-sm bg-white`}>
+                                            <option value="north">North</option>
+                                            <option value="south">South</option>
+                                            <option value="east">East</option>
+                                            <option value="west">West</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {/* HEATING: Efficiency */}
+                                    {hvacMode === 'heating' && (
+                                        <div className="bg-white p-2 rounded border border-orange-200">
+                                            <label className="block text-xs font-semibold text-orange-800 mb-1">Furnace Efficiency</label>
+                                            <select value={furnaceEfficiency} onChange={e=>setFurnaceEfficiency(Number(e.target.value))} className="w-full px-2 py-1 border border-orange-200 rounded text-sm">
+                                                <option value="80">Standard (80%)</option>
+                                                <option value="96">High Efficiency (96%)</option>
+                                                <option value="60">Old Unit (60%)</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div className={`mt-4 pt-4 border-t border-${themeColor}-200`}>
+                                        <div className={`text-sm text-${themeColor}-800`}>Required Capacity:</div>
+                                        <div className={`text-3xl font-black text-${themeColor}-600`}>{displayValue} {displayUnit}</div>
+                                        <div className={`text-xs text-${themeColor}-700 mt-1 italic`}>
+                                            {hvacMode === 'heating' ? 'Input Rating Required' : 'Total Heat Gain'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Selection Controls */}
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                {selectedWall ? (
+                                    <div className="mb-4">
+                                        <h3 className="font-semibold text-gray-900">Edit: {selectedWall.toUpperCase()}</h3>
+                                        <p className="text-xs text-gray-600 mb-2">R-Value: {getWallInsulation(selectedWall).rValue + 3}</p>
+                                    </div>
+                                ) : (
+                                    <div className="mb-4 text-sm text-gray-500 italic">Select a wall to edit materials</div>
+                                )}
+
+                                <div className="flex gap-2 mb-4">
+                                    <button onClick={() => setSelectionMode('exterior')} className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${selectionMode === 'exterior' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}>Ext</button>
+                                    <button onClick={() => setSelectionMode('insulation')} className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${selectionMode === 'insulation' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}>Insul</button>
+                                    <button onClick={() => setSelectionMode('features')} className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${selectionMode === 'features' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}>Features</button>
+                                </div>
+
+                                <div className="h-48 overflow-y-auto">
+                                    {selectionMode === 'exterior' && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {EXTERIOR_MATERIALS.map(material => (
+                                                <button key={material.id} onClick={() => handleMaterialSelect(material.id)} disabled={!selectedWall} className={`p-2 rounded border text-left ${selectedWall && wallExterior[selectedWall] === material.id ? 'border-green-600 bg-green-50' : 'border-gray-300'} ${!selectedWall && 'opacity-50'}`}>
+                                                    <div className="w-full h-4 rounded mb-1" style={{ backgroundColor: `#${material.color.toString(16).padStart(6, '0')}` }}></div>
+                                                    <div className="text-xs font-medium">{material.name}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {selectionMode === 'insulation' && (
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {INSULATION_OPTIONS.map(option => (
+                                                <button key={option.id} onClick={() => handleMaterialSelect(option.id)} disabled={!selectedWall} className={`p-2 rounded border text-left flex justify-between items-center ${selectedWall && wallInsulation[selectedWall] === option.id ? 'border-blue-600 bg-blue-50' : 'border-gray-300'} ${!selectedWall && 'opacity-50'}`}>
+                                                    <div>
+                                                        <div className="text-xs font-medium">{option.name}</div>
+                                                        <div className="text-xs text-gray-500">R-{option.rValue}</div>
+                                                    </div>
+                                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: `#${option.color.toString(16).padStart(6, '0')}` }}></div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {selectionMode === 'features' && selectedWall && (
+                                        <div className="space-y-2">
+                                            <div className="flex gap-1">
+                                                <button onClick={()=>addFeature('window-std')} className="flex-1 bg-green-100 p-2 text-xs border border-green-300 rounded hover:bg-green-200 font-bold">+ Win</button>
+                                                <button onClick={()=>addFeature('window-pic')} className="flex-1 bg-green-100 p-2 text-xs border border-green-300 rounded hover:bg-green-200 font-bold">+ Pic</button>
+                                                <button onClick={()=>addFeature('door')} className="flex-1 bg-amber-100 p-2 text-xs border border-amber-300 rounded hover:bg-amber-200 font-bold">+ Door</button>
+                                            </div>
+                                            
+                                            <div className="mt-2 border-t pt-2">
+                                                <div className="text-xs font-bold text-gray-500 mb-1">Current Features:</div>
+                                                {(wallFeatures[selectedWall] || []).map((f, i) => (
+                                                    <div key={f.id} className="flex justify-between items-center bg-white p-2 mb-1 rounded border text-xs">
+                                                        <span>{FEATURE_STATS[f.type].name}</span>
+                                                        <button onClick={()=>removeFeature(selectedWall, f.id)} className="text-red-500 hover:bg-red-50 rounded p-1"><TrashIcon/></button>
+                                                    </div>
+                                                ))}
+                                                {(!wallFeatures[selectedWall] || wallFeatures[selectedWall].length === 0) && <div className="text-xs italic text-gray-400">No features added</div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {selectionMode === 'features' && !selectedWall && <div className="text-xs text-gray-400 italic">Select a wall to add features</div>}
+                                </div>
+                            </div>
+                            
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <h3 className="text-sm font-semibold mb-2">Roof Material</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {ROOF_MATERIALS.map(material => (
+                                        <button key={material.id} onClick={() => setRoofMaterial(material.id)} className={`p-2 rounded border text-left ${roofMaterial === material.id ? 'border-purple-600 bg-purple-50' : 'border-gray-300'}`}>
+                                            <div className="w-full h-4 rounded mb-1" style={{ backgroundColor: `#${material.color.toString(16).padStart(6, '0')}` }}></div>
+                                            <div className="text-xs font-medium">{material.name}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<HouseBuilder />);
+
+    </script>
 </body>
 </html>
