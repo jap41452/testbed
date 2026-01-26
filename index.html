@@ -464,18 +464,44 @@ async function editNode(i) {
   try {
     const node = nodes[i] || { bc:'free', W:0, Kv:0, Kr:0, H:0 };
     const { value: data } = await Swal.fire({
-      // ... existing code ...
+      title: `Node ${i} Properties`,
+      html:
+        `<label><span>BC:</span><select id="bc" class="swal2-select" style="width:90px">
+          <option value="free" ${node.bc === 'free' ? 'selected' : ''}>Free</option>
+          <option value="pinned" ${node.bc === 'pinned' ? 'selected' : ''}>Simple support (w=0, θ free)</option>
+          <option value="fixed" ${node.bc === 'fixed' ? 'selected' : ''}>Fixed</option>
+        </select></label>
+        <label><span>W:</span><input id="W" class="swal2-input" value="${node.W}"></label>
+        <label><span>Kv:</span><input id="Kv" class="swal2-input" value="${node.Kv}"></label>
+        <label><span>Kr:</span><input id="Kr" class="swal2-input" value="${node.Kr}"></label>
+        <label><span>Drop H:</span><input id="H" class="swal2-input" value="${node.H}"></label>
+        <div class="muted" style="max-width:180px;text-align:left;line-height:1.2">
+          <div>Stick: attach mass W/G.</div>
+          <div>Bounce: restitution e.</div>
+        </div>`,
+      focusConfirm: false,
+      preConfirm: () => [
+        document.getElementById("bc").value,
+        parseFloat(document.getElementById("W").value),
+        parseFloat(document.getElementById("Kv").value),
+        parseFloat(document.getElementById("Kr").value),
+        parseFloat(document.getElementById("H").value)
+      ]
     });
     if (data) {
-      nodes[i] = { ...nodes[i], bc: data[0], W: (isFinite(data[1])? data[1]:0), Kv: (isFinite(data[2])? data[2]:0), Kr: (isFinite(data[3])? data[3]:0), H: (isFinite(data[4])? data[4]:0) };
+      nodes[i] = { 
+        ...nodes[i], 
+        bc: data[0], 
+        W: (isFinite(data[1])? data[1]:0), 
+        Kv: (isFinite(data[2])? data[2]:0), 
+        Kr: (isFinite(data[3])? data[3]:0), 
+        H: (isFinite(data[4])? data[4]:0) 
+      };
       safeDrawBeam();
-      autoUpdateTimeSteps(); // ADD THIS LINE
+      autoUpdateTimeSteps();
     }
   } finally { isEditing = false; markSuppressClicks(); toggleCanvasBusy(false); }
 }
-// [Rest of the code continues exactly as before - simulateDrop, computeFirstMode, animation functions, etc.]
-// I'll continue in next message if needed, but the key fix is in attachCanvasHandlers
-
 
 // ===== RK4 Simulation Logic =====
 let anim = {
@@ -1141,4 +1167,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
