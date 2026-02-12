@@ -1,1171 +1,3384 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Beam Drop Response  </title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
-  
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-  <style>
-    body { background: #f4f4f4; font-family: sans-serif; padding: 10px; }
-    
-    /* Main container width constraint */
-    #beamCanvas, .modeCanvas, .toolbar, .results, .legend {
-      max-width: 800px;
-      width: 800px;
-      box-sizing: border-box; /* Ensures padding doesn't add to width */
-    }
-
-    #beamCanvas { border: 1px solid #ccc; margin-top: 12px; cursor: pointer; background: #fff; }
-    
-    /* SweetAlert Tweaks */
-    .swal2-popup { font-size: 12px !important; width: auto !important; min-width: 220px !important; }
-    .swal2-input, .swal2-select { font-size: 12px !important; width: 90px !important; margin: 4px !important; }
-    .swal2-html-container label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .swal2-html-container label span { margin-right: 8px; }
-
-    /* Toolbar Layout */
-    .toolbar { 
-      display: flex; 
-      flex-wrap: wrap; 
-      gap: 10px; 
-      align-items: center; 
-      margin-bottom: 6px;
-    }
-    .toolbar-row {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-    }
-    
-    .toolbar label { display: inline-flex; align-items: center; gap: 4px; color: #000 !important; font-size: 14px; }
-    .toolbar input[type=number], .toolbar input[type=text], .toolbar select { 
-      height: 24px; padding: 2px 4px; line-height: 24px; font-size: 13px; border: 1px solid #999;
-    }
-    .toolbar button { 
-      height: 28px; padding: 0 12px; font-size: 13px; cursor: pointer; 
-      background: #eee; border: 1px solid #999; border-radius: 3px;
-    }
-    .toolbar button:hover { background: #ddd; }
-    
-    /* Specific Input Widths */
-    #numSegments { width: 40px; }
-    #gravityInput { width: 50px; }
-    #dtInput, #durInput { width: 60px; }
-    #eInput, #zetaInput { width: 50px; }
-    #freqOutput { width: 70px; text-align: right; background: #f0f0f0; border: 1px solid #ccc; }
-
-    .results { margin-top: 6px; font-size: 14px; }
-    .muted { color:#666; font-size: 12px; }
-    .modeCanvas { display:block; margin: 10px 0; border: 1px solid #ccc; background:#fff; }
-    .legend { font-size: 12px; color:#333; margin-top:4px; }
-
-    .busy { pointer-events: none; opacity: 0.6; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>3D Frame Analysis (v2.3: Moment Releases Fixed)</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --panel:#f5f6f8;
+    --panel2:#ffffff;
+    --line:#d7dbe3;
+    --text:#111827;
+    --muted:#5b6472;
+    --accent:#2563eb;
+    --warn:#b45309;
+    --err:#b91c1c;
+    --ok:#166534;
+  }
+  html,body{height:100%; margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text);}
+  #app{height:100%; display:grid; grid-template-columns: 375px 1fr; grid-template-rows: 1fr; gap:10px; padding:10px; box-sizing:border-box;}
+  #ui{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; box-sizing:border-box; overflow-y:auto;}
+  #rightColumn{display:flex; flex-direction:column; gap:10px; min-width:0;}
+  #viewportWrap{flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; min-height:400px;}
+  #canvas{width:100%; height:100%; background:#ffffff; border:1px solid var(--line); border-radius:8px; display:block;}
+  #stressPanel{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px; box-sizing:border-box; max-height:300px; overflow-y:auto;}
+  #stressContent{font-size:12px;}
+  .stressTable{width:100%; border-collapse:collapse; font-size:11px;}
+  .stressTable th{background:var(--panel); padding:6px 8px; text-align:left; font-weight:600; border-bottom:2px solid var(--line);}
+  .stressTable td{padding:6px 8px; border-bottom:1px solid var(--line);}
+  .stressTable tr:hover{background:rgba(0,0,0,0.02);}
+  .stressLabel{font-weight:600; color:var(--text); margin-bottom:4px;}
+  .stressValue{color:var(--muted);}
+  h3{margin:0 0 8px 0; font-size:14px; font-weight:700;}
+  .sectionTitle{font-size:12px; font-weight:700; margin:10px 0 6px; color:#1f2937;}
+  button{width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cfd6e2; background:#ffffff; color:var(--text); font-weight:700; cursor:pointer;}
+  button:hover{border-color:#b9c3d6;}
+  button:disabled{opacity:0.55; cursor:not-allowed;}
+  .hint{font-size:12px; color:var(--muted); line-height:1.25; margin:8px 0;}
+  .small{font-size:12px; color:var(--muted);}
+  .badge{display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #cfd6e2; background:#ffffff; font-size:12px; color:var(--muted);}
+  #summary{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  #log{margin-top:10px; padding:8px; background:#ffffff; border:1px solid var(--line); border-radius:8px; height:190px; overflow:auto; font-size:12px; line-height:1.25; white-space:pre-wrap;}
+  .log-warn{color:var(--warn);} .log-err{color:var(--err);} .log-ok{color:var(--ok);}
+  #vpBar{display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted); padding:0 2px;}
+  #selInfo{font-size:11px; color:var(--text); min-height:16px; padding:4px 6px; background:rgba(255,255,255,0.9); border-radius:6px; font-weight:500; line-height:1.3; word-break:break-word;}
+  textarea{width:100%; box-sizing:border-box; min-height:72px; max-height:140px; resize:vertical; padding:8px; border-radius:8px; border:1px solid #cfd6e2; background:#ffffff; color:var(--text);
+           font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.2;}
+  .btnRow{display:flex; gap:8px;} .btnRow button{width:50%;}
+  .mini{padding:7px 8px; font-size:12px;}
+  .sep{height:10px;}
+  .sliderWrap{margin-top:8px;}
+  input[type="range"]{width:100%;}
+  .kv{display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted);}
+</style>
 </head>
+
 <body>
-  <h2>Beam Dropped Weight Response </h2>
+<div id="app">
+  <div id="ui">
+    <h3>Frame Definition</h3>
 
-  <div class="toolbar">
-    <div class="toolbar-row">
-      <label><span>Segments (max 10):</span> <input id="numSegments" type="number" min="1" max="10" value="2"></label>
-      <button id="btnBuild">Build Beam</button>
-      <div style="width: 20px;"></div> 
+<div class="btnRow" style="margin-bottom:8px;">
+  <button id="btnExportJSON" class="mini">Export JSON</button>
+  <button id="btnImportJSON" class="mini">Import JSON</button>
+</div>
+
+<button id="btnExportCSV" class="mini" style="margin-bottom:10px;" disabled>
+  Export Results CSV (timestamped)
+</button>
+
+<input id="fileImportJSON" type="file" accept=".json" style="display:none" />
+
+
+    <div class="sectionTitle">Nodes</div>
+    <button id="btnImportNodes">Load Nodes File</button>
+    <input id="fileNodes" type="file" accept=".txt,.tsv,.csv" style="display:none" />
+    <div class="hint small">Paste from Excel (tab-delimited) or CSV. Header row optional.</div>
+    <textarea id="taNodes" placeholder="Paste node table: node  x  y  z  delX  delY  delZ  thetaXX  thetaYY  thetaZZ  Fx  Fy  Fz"></textarea>
+    <div class="btnRow">
+      <button id="btnParseNodes" class="mini">Use Nodes</button>
+      <button id="btnResetNodes" class="mini">Reset</button>
     </div>
+
+    <div class="sectionTitle">Segments</div>
+    <button id="btnImportElems">Load Segments File</button>
+    <input id="fileElems" type="file" accept=".txt,.tsv,.csv" style="display:none" />
+  <div class="hint small">elem  ni  nj  E  G  Izz  Iyy  Jyz  Ayz  rho  x3  y3  z3. Header optional.</div> 
+    <textarea id="taElems" placeholder="Paste segment table: elem  ni  nj  E  G  Izz  Iyy  Jyz  Ayz  x3  y3  z3"></textarea>
+    <div class="btnRow">
+      <button id="btnParseElems" class="mini">Use Segments</button>
+      <button id="btnResetElems" class="mini">Reset</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <button id="btnDraw" disabled>Draw / Edit Frame</button>
+    <div class="sep"></div>
+    <button id="btnSolve" disabled>Static Solve (10 subsegments/segment)</button>
+
+    <div class="sliderWrap">
+      <div class="kv">
+        <div>Deflection scale</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="defScaleInput" type="number" step="0.1" value="0" disabled 
+                 style="width:70px; padding:4px 6px; border-radius:6px; border:1px solid #cfd6e2; font-size:12px;" />
+          <span id="defScaleLabel" style="font-size:11px; color:var(--muted);">/ <span id="defScaleMax">200</span></span>
+        </div>
+      </div>
+      <input id="defScale" type="range" min="0" max="200" step="1" value="0" disabled />
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <input id="defScaleMaxInput" type="number" step="10" value="200" placeholder="Max" 
+               style="width:80px; padding:4px 6px; border-radius:6px; border:1px solid #cfd6e2; font-size:11px;" />
+        <button id="btnSetMaxScale" class="mini" style="flex:1;">Set Slider Max</button>
+      </div>
+      <div class="hint small">Adjust scale to view deflected shape. Use input box for precise values.</div>
+    </div>
+
+    <div class="hint">Viewport: Left-drag = orbit, Right-drag = pan, Wheel = zoom. Hover nodes/segments for info, click to pin.</div>
+    <div id="summary"></div>
+    <div id="log"></div>
   </div>
 
-  <div class="toolbar">
-    <div class="toolbar-row">
-      <label><span>Gravity (G):</span> <input id="gravityInput" type="number" value="386"></label>
-      <label><span>Δt (s):</span> <input id="dtInput" type="number" min="1e-6" step="0.0001" value="0.001"></label>
-      <label><span>T (s):</span> <input id="durInput" type="number" min="0.01" step="0.01" value="1.5"></label>
-      <div style="border-left: 1px solid #ccc; height: 20px; margin: 0 4px;"></div>
-      <label><span>Impact:</span>
-        <select id="impactMode">
-          <option value="stick">Stick (e=0)</option>
-          <option value="bounce">Bounce (e&gt;0)</option>
-        </select>
-      </label>
-      <label><span>e:</span> <input id="eInput" type="number" min="0" max="1" step="0.01" value="0.5"></label>
-      <label><span>ζ (%):</span> <input id="zetaInput" type="number" min="0" step="0.1" value="2.0"></label>
+  <div id="rightColumn">
+    <div id="viewportWrap">
+      <div id="vpBar">
+        <div>3D Viewport</div>
+        <div id="status" class="small">Idle</div>
+      </div>
+      <canvas id="canvas"></canvas>
+      <div id="selInfo"></div>
+    </div>
+
+    <div id="stressPanel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0;">Element Analysis</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <select id="stressViewSelector" style="padding:4px 8px; border-radius:6px; border:1px solid var(--line); font-size:11px; background:#fff;" disabled>
+            <option value="table">Stress Table</option>
+            <option value="moment">Moment Diagrams</option>
+            <option value="shear">Shear Diagrams</option>
+            <option value="combined">Combined Stress</option>
+          </select>
+          <div class="small" style="color:var(--muted);">Click a segment</div>
+        </div>
+      </div>
+      <div id="stressContent">
+        <div style="color:var(--muted); font-size:12px; text-align:center; padding:20px;">
+          No segment selected. Click on a segment in the viewport to view its analysis.
+        </div>
+      </div>
     </div>
   </div>
-
-  <div class="toolbar">
-    <div class="toolbar-row" style="background: #e8e8e8; padding: 6px; border-radius: 4px;">
-      <button id="btnDrop" style="font-weight: bold; background: #ddd;">Simulate Drop</button>
-      <div style="flex-grow:1"></div> <button id="btnImportJSON">Import JSON</button>
-      <button id="btnExportJSON">Export JSON</button>
-      <button id="btnExport">Export CSV</button>
-      <input type="file" id="fileInput" style="display:none" accept=".json">
-    </div>
-  </div>
-
-  <canvas id="beamCanvas" width="900" height="220"></canvas>
-  <div id="dropSummary" class="results"></div>
-  <canvas id="timePlot" width="900" height="260" class="modeCanvas"></canvas>
-
-  <div class="toolbar" style="margin-top:4px;">
-    <div class="toolbar-row">
-      <button id="btnAnimToggle">Play</button>
-      <label style="align-items:center"><span>Speed:</span>
-        <input id="animSpeed" type="range" min="0.01" max="1" step="0.01" value="0.5" style="width:140px"></label>
-      <span id="animStatus" class="muted"></span>
-    </div>
-  </div>
-  
-  <canvas id="animCanvas" width="900" height="240" class="modeCanvas"></canvas>
-  <div class="legend">Blue line: beam deflection. Gray blocks: beam segments. Black circle: dropped mass.</div>
 
 <script>
-// ===== Config & State =====
-const INTERNAL_NODES_PER_SEG = 10; 
-const MARGIN_X = 60; 
-const BEAM_COLOR = "#9E9E9E"; 
+/* =========================
+   3D FRAME ANALYSIS v2
+   =========================
+   DEVELOPMENT STATUS:
+   ✓ Data model updated to full 3D (x,y,z coords, 6 DOF per node, 3D element properties)
+   ✓ Material type (brittle/ductile) removed - simple static & modes solver
+   ✓ 3D viewport with orbit/pan/zoom camera controls
+   
+   TODO (Next Steps):
+   - Implement 3D space frame element stiffness (12x12, using E, G, Ayz, Izz, Iyy, Jyz)
+   - Implement local coordinate transformation using x3,y3,z3 orientation point
+   - Update solver to use 6 DOF per node (ux,uy,uz, rx,ry,rz)
+   - Add modal analysis (eigenvalue solver for natural frequencies & mode shapes)
+   - Update stress recovery for 3D elements
+   ========================= */
 
-let segments = [];
-let nodes = [];      
-let timeChart = null;
-let beamCanvasEl = null;
-let isDrawing = false;
-let isEditing = false;
-let canvasClickHandler = null;
-let suppressClicksUntil = 0;
+/* =========================
+   Defaults
+   ========================= */
 
-function getRefine(){ return INTERNAL_NODES_PER_SEG; }
-function safeDrawBeam(){ requestAnimationFrame(drawBeam); }
+// Standard gravity (choose by unit system)
+const G_SI      = 1; //9.80665;   // m/s^2
+const G_IMP_IN  = 1; //386.0886;  // in/s^2  (32.174 ft/s^2 * 12 in/ft)
 
-let lastSim = null; 
+// TEMP: pick one until you add a Units dropdown
+let UNIT_SYSTEM = "imperial"; // "imperial" or "metric"
 
-// ===== Build / Draw =====
-
-function buildBeam() {
-  const segInput = document.getElementById("numSegments");
-  const S = Math.max(1, Math.min(10, parseInt(segInput.value) || 2));
-  
-  const totalL = 96; 
-  segments = [];
-  for (let i = 0; i < S; i++) {
-    segments.push({ E: 12e6, I: 21.3, L: totalL / S, rho: 0.28, A: 2.0 });
-  }
-  nodes = Array(S + 1).fill().map(() => ({ bc: "free", W: 0, Kv: 0, Kr: 0, H: 0 }));
-  
-  safeDrawBeam();
-  renderDropSummary(null);
-  drawTimeHistory([], []);
-  lastSim = null;
-  
-  // Auto-calculate first mode frequency and update time inputs
-  autoUpdateTimeSteps();
+function getGravity(){
+  return (UNIT_SYSTEM === "metric") ? G_SI : G_IMP_IN;
 }
 
+const DEFAULT_NODES_TEXT =
+`node	x	y	z	delX	delY	delZ	thetaXX	thetaYY	thetaZZ	Fx	Fy	Fz
+1	0	0	0	0	0	0	0	0	0
+2	0	0	96
+3	60	0	0	0	0	0	0	0	0
+4	60	0	96
+5	0	72	0	0	0	0
+6	0	72	96							500	500
+7	60	72	0	0	0	0
+8	60	72	96`;
 
-async function editSegment(i){
-  if (isEditing) return;
-  isEditing = true; toggleCanvasBusy(true);
-  try {
-    const s = segments[i];
-    const { value: data } = await Swal.fire({
-      title: `Segment ${i} Properties`,
-      html:
-        `<label><span>E:</span><input id="segE" class="swal2-input" value="${s.E}"></label>
-         <label><span>I:</span><input id="segI" class="swal2-input" value="${s.I}"></label>
-         <label><span>L:</span><input id="segL" class="swal2-input" value="${s.L}"></label>
-         <label><span>ρ:</span><input id="segRho" class="swal2-input" value="${s.rho}"></label>
-         <label><span>A:</span><input id="segA" class="swal2-input" value="${s.A}"></label>`,
-      focusConfirm:false,
-      preConfirm:()=>[
-        parseFloat(document.getElementById('segE').value),
-        parseFloat(document.getElementById('segI').value),
-        parseFloat(document.getElementById('segL').value),
-        parseFloat(document.getElementById('segRho').value),
-        parseFloat(document.getElementById('segA').value)
-      ]
-    });
-    if (data){
-      const [E,I,L,rho,A] = data.map(v=> (isFinite(v)? v:0));
-      segments[i] = { E,I,L,rho,A };
-      safeDrawBeam();
-      autoUpdateTimeSteps(); // ADD THIS LINE
-    }
-  } finally { isEditing = false; markSuppressClicks(); toggleCanvasBusy(false); }
-}
-
-
-function drawBeam() {
-  if (isDrawing) return;
-  isDrawing = true;
-  try {
-    const canvas = beamCanvasEl || document.getElementById("beamCanvas");
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!segments.length) return;
-
-    const margin = MARGIN_X;
-    const midY = canvas.height / 2;
-
-    const totalLength = segments.reduce((sum, seg) => sum + seg.L, 0);
-    const scaleX = (canvas.width - 2 * margin) / totalLength;
-
-    const maxEI = Math.max(...segments.map(seg => seg.E * seg.I));
-    const maxHeight = 0.05 * canvas.height;
-
-    // Draw ALL segments first
-    let x = margin;
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const width = seg.L * scaleX;
-      const height = (seg.E * seg.I / maxEI) * maxHeight;
-
-      ctx.fillStyle = BEAM_COLOR;
-      ctx.fillRect(x, midY - height / 2, width, height);
-      
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, midY - height / 2, width, height);
-
-      ctx.fillStyle = "black";
-      ctx.textAlign = "center";
-      const props = [ `E: ${seg.E}`, `I: ${seg.I}`, `L: ${seg.L}`, `ρ: ${seg.rho}`, `A: ${seg.A}` ];
-      const startY = midY + height / 2 + 12;
-      ctx.font = "11px sans-serif";
-      for (let j = 0; j < props.length; j++) ctx.fillText(props[j], x + width / 2, startY + j * 14);
-
-      x += width;
-    }
-
-    // Draw ALL nodes second (on top)
-    x = margin;
-    drawNodeFeatures(ctx, x, midY, nodes[0], maxHeight);
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const width = seg.L * scaleX;
-      x += width;
-      drawNodeFeatures(ctx, x, midY, nodes[i+1], maxHeight);
-    }
-
-  } finally { isDrawing = false; }
-}
-
-// ===== Supports / Node graphics =====
-function drawFixedSupport(ctx, x, y) {
-  ctx.save();
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 2;
-
-  const height = 22;
-  const offset = 6;
-  const hatchDx = 12;
-  const hatchDy = 8;
-  const spacing = 6;
-
-  ctx.beginPath();
-  ctx.moveTo(x - offset, y - height);
-  ctx.lineTo(x - offset, y + height);
-  ctx.stroke();
-
-  for (let yy = y - height; yy <= y + height; yy += spacing){
-    ctx.beginPath();
-    ctx.moveTo(x - offset, yy);
-    ctx.lineTo(x - offset - hatchDx, yy - hatchDy);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawNodeFeatures(ctx, x, y, node = { bc: 'free', W:0, Kv:0, Kr:0, H:0 }, maxEIHeight = 20){
-  ctx.save();
-  ctx.strokeStyle = "#1976D2";
-  ctx.lineWidth = 2;
-
-  if (node.bc === "pinned") {
-    ctx.strokeStyle = "#000"; 
-    ctx.beginPath(); ctx.moveTo(x - 15, y + 17); ctx.lineTo(x, y); ctx.lineTo(x + 15, y + 17); ctx.closePath(); ctx.stroke();
-  } else if (node.bc === "fixed") {
-    drawFixedSupport(ctx, x, y);
-  }
-
-  ctx.strokeStyle = "#000";
-  if (node.Kv > 0) {
-    ctx.beginPath(); let springY = y + 8; ctx.moveTo(x, springY);
-    for (let i=0;i<4;i++){ ctx.lineTo(x + (i%2? -6:6), springY += 6); }
-    ctx.lineTo(x, springY + 6); ctx.stroke();
-  }
-  if (node.Kr > 0) {
-    ctx.beginPath();
-    ctx.moveTo(x-35, y-20); ctx.lineTo(x-25, y-20); ctx.lineTo(x-22, y-30);
-    ctx.lineTo(x-16, y-10); ctx.lineTo(x-10, y-30); ctx.lineTo(x-8,  y-20);
-    ctx.lineTo(x,    y-20); ctx.lineTo(x,    y+20); ctx.lineTo(x+8,  y+20);
-    ctx.lineTo(x+10, y+30); ctx.lineTo(x+16, y+10); ctx.lineTo(x+22, y+30);
-    ctx.lineTo(x+25, y+20); ctx.lineTo(x+35, y+20);
-    ctx.stroke();
-  }
-
-  const hasW = (node.W && node.W > 0);
-  const r = hasW ? 16 : 8; 
-  const lift = (hasW && (Number(node.H)||0) > 0) ? (3 * maxEIHeight) : 0;
-  const yMass = y - lift;
-
-  ctx.fillStyle = "#1976D2";
-  ctx.beginPath(); ctx.arc(x, yMass, r, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = "#fff"; ctx.lineWidth=1;
-  ctx.stroke();
-
-  function fmt(v){
-    if (!isFinite(v)) return '0';
-    const a = Math.abs(v);
-    if (a >= 1000) return v.toFixed(0);
-    if (a >= 100)  return v.toFixed(1);
-    if (a >= 10)   return v.toFixed(2);
-    if (a >= 1)    return v.toFixed(3);
-    if (a >= 0.01) return v.toFixed(4);
-    return v.toExponential(2);
-  }
-  const labels = [];
-  if (Math.abs(Number(node.W)||0)  > 1e-12) labels.push(`W:${fmt(Number(node.W))}`);
-  if (Math.abs(Number(node.H)||0)  > 1e-12) labels.push(`H:${fmt(Number(node.H))}`);
-  if (Math.abs(Number(node.Kv)||0) > 1e-12) labels.push(`Kv:${fmt(Number(node.Kv))}`);
-  if (Math.abs(Number(node.Kr)||0) > 1e-12) labels.push(`Kr:${fmt(Number(node.Kr))}`);
-
-  if (labels.length){
-    const canvas = (ctx.canvas ?? document.getElementById('beamCanvas'));
-    ctx.font = "11px sans-serif";
-    ctx.fillStyle = "#000";
-    ctx.textAlign = "left";
-
-    let tx = x + r + 6;
-    let tyTop = yMass - r - (labels.length-1)*12;
-
-    const maxW = Math.max(...labels.map(t => ctx.measureText(t).width));
-    if (tx + maxW + 4 > canvas.width) tx = Math.max(4, canvas.width - maxW - 4);
-    if (tyTop < 8) tyTop = 8;
-
-    for (let i=0;i<labels.length;i++){
-      ctx.fillText(labels[i], tx, tyTop + i*12);
-    }
-  }
-
-  ctx.restore();
-}
-
-// ===== Interaction on canvas =====
-function attachCanvasHandlers() {
-  const canvas = beamCanvasEl;
-  if (canvasClickHandler) canvas.removeEventListener("click", canvasClickHandler);
-
-  canvasClickHandler = function(e) {
-    const now = performance.now();
-    if (isDrawing || isEditing || now < suppressClicksUntil) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    // 1. Calculate the Scaling Factor (CSS size vs Internal Resolution)
-    const rect = canvas.getBoundingClientRect();
-    const scaleX_Mouse = canvas.width / rect.width; // Fixes the 900 vs 800 mismatch
-    const scaleY_Mouse = canvas.height / rect.height;
-
-    // 2. Adjust click coordinates to match Internal Canvas Resolution
-    const xClick = (e.clientX - rect.left) * scaleX_Mouse;
-    const yClick = (e.clientY - rect.top) * scaleY_Mouse;
-
-    if (!segments.length || !nodes.length) return;
-
-    // 3. Setup Geometry Constants (Matching drawBeam)
-    const margin = MARGIN_X;
-    const midY = canvas.height / 2;
-    const totalLength = segments.reduce((sum, seg) => sum + seg.L, 0);
-    if (totalLength <= 0) return;
-
-    const scaleX = (canvas.width - 2 * margin) / totalLength;
-    const maxEI = Math.max(...segments.map(seg => seg.E * seg.I)) || 1;
-    const maxHeight = 0.05 * canvas.height;
-
-    // ---------------------------------------------------------
-    // 4. Build Node Positions (Replicates drawBeam Loop Logic)
-    // ---------------------------------------------------------
-    const nodePositions = [];
-    let x = margin;
-
-    // Node 0 (Leftmost)
-    nodePositions.push({ x: x, idx: 0, node: nodes[0] });
-
-    // Remaining Nodes (Loop through segments, then add Node i+1)
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const width = seg.L * scaleX;
-      x += width; // Increment X by segment width
-      nodePositions.push({ x: x, idx: i + 1, node: nodes[i + 1] });
-    }
-
-    // ---------------------------------------------------------
-    // 5. Hit Testing
-    // ---------------------------------------------------------
-
-    // Check Nodes FIRST (Nodes sit on top of segments)
-    const nodeHitR = 40; 
-    for (let k = 0; k < nodePositions.length; k++) {
-      const nodePos = nodePositions[k];
-      const hasW = (nodePos.node.W && nodePos.node.W > 0);
-      // Lift calculation must match drawBeam's visual lift
-      const lift = (hasW && (Number(nodePos.node.H) || 0) > 0) ? (3 * maxHeight) : 0;
-      const yNode = midY - lift;
-
-      const dx = xClick - nodePos.x;
-      const dy = yClick - yNode;
-      const distance = Math.hypot(dx, dy);
-
-      if (distance <= nodeHitR) {
-        setTimeout(() => editNode(nodePos.idx), 0);
-        return;
-      }
-    }
-
-    // Then Check Segments
-    x = margin; // Reset x for segment loop
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const width = seg.L * scaleX;
-      const height = (seg.E * seg.I / maxEI) * maxHeight;
-
-      const left = x + 5;
-      const right = x + width - 5;
-
-      if (right > left) {
-        if (xClick >= left && xClick <= right &&
-            yClick >= (midY - height / 2 - 15) &&
-            yClick <= (midY + height / 2 + 15)) {
-          setTimeout(() => editSegment(i), 0);
-          return;
-        }
-      }
-      x += width;
-    }
-  };
-
-  canvas.addEventListener("click", canvasClickHandler);
-}
-
-function toggleCanvasBusy(on){
-  const c = beamCanvasEl || document.getElementById('beamCanvas');
-  if (!c) return;
-  if (on) c.classList.add('busy'); else c.classList.remove('busy');
-}
-function markSuppressClicks(){ suppressClicksUntil = performance.now() + 300; }
-
-async function editNode(i) {
-  if (i < 0 || i >= nodes.length) return;
-  if (isEditing) return;
-  isEditing = true; toggleCanvasBusy(true);
-  try {
-    const node = nodes[i] || { bc:'free', W:0, Kv:0, Kr:0, H:0 };
-    const { value: data } = await Swal.fire({
-      title: `Node ${i} Properties`,
-      html:
-        `<label><span>BC:</span><select id="bc" class="swal2-select" style="width:90px">
-          <option value="free" ${node.bc === 'free' ? 'selected' : ''}>Free</option>
-          <option value="pinned" ${node.bc === 'pinned' ? 'selected' : ''}>Simple support (w=0, θ free)</option>
-          <option value="fixed" ${node.bc === 'fixed' ? 'selected' : ''}>Fixed</option>
-        </select></label>
-        <label><span>W:</span><input id="W" class="swal2-input" value="${node.W}"></label>
-        <label><span>Kv:</span><input id="Kv" class="swal2-input" value="${node.Kv}"></label>
-        <label><span>Kr:</span><input id="Kr" class="swal2-input" value="${node.Kr}"></label>
-        <label><span>Drop H:</span><input id="H" class="swal2-input" value="${node.H}"></label>
-        <div class="muted" style="max-width:180px;text-align:left;line-height:1.2">
-          <div>Stick: attach mass W/G.</div>
-          <div>Bounce: restitution e.</div>
-        </div>`,
-      focusConfirm: false,
-      preConfirm: () => [
-        document.getElementById("bc").value,
-        parseFloat(document.getElementById("W").value),
-        parseFloat(document.getElementById("Kv").value),
-        parseFloat(document.getElementById("Kr").value),
-        parseFloat(document.getElementById("H").value)
-      ]
-    });
-    if (data) {
-      nodes[i] = { 
-        ...nodes[i], 
-        bc: data[0], 
-        W: (isFinite(data[1])? data[1]:0), 
-        Kv: (isFinite(data[2])? data[2]:0), 
-        Kr: (isFinite(data[3])? data[3]:0), 
-        H: (isFinite(data[4])? data[4]:0) 
-      };
-      safeDrawBeam();
-      autoUpdateTimeSteps();
-    }
-  } finally { isEditing = false; markSuppressClicks(); toggleCanvasBusy(false); }
-}
-
-// ===== RK4 Simulation Logic =====
-let anim = {
-  frames: [], times: [], xs: [], maxAbs: 0, running: false, rafId: 0, idx: 0,
-  speed: 0.5, mode: 'stick', dropRef: 0, g: 386, massY: [], dropXpx: 0, preN: 60, preYs: [], tFall: 0
+const DEFAULT_ELEMS_TEXT =
+`elem	ni	nj	E	G	Izz	Iyy	Jyz	Ayz	rho	x3	y3	z3
+1	1	2	12000000	4610000	10.7	2.67	7.3	8	0.03	60	0	0
+2	3	4	12000000	4610000	10.7	2.67	7.3	8	0.03	0	0	0
+3	5	6	12000000	4610000	10.7	2.67	7.3	8	0.03	60	72	0
+4	7	8	12000000	4610000	10.7	2.67	7.3	8	0.03	0	72	0
+5	4	8	12000000	4610000	10.7	2.67	7.3	8	0.03	1	1	96
+6	2	4	12000000	4610000	10.7	2.67	7.3	8	0.03	1	1	96
+7	2	6	12000000	4610000	10.7	2.67	7.3	8	0.03	1	1	96
+8	6	8	12000000	4610000	10.7	2.67	7.3	8	0.03	1	1	96`;
+/* =========================
+   Model
+   ========================= */
+const Model = {
+  nodes: [],
+  elems: [],
+  nodeById: new Map(),
+  elemById: new Map(),
+  lastSolution: null,
+  isDrawn: false
 };
 
-function computeRefinedXs(){
-  const m = getRefine();
-  const S = segments.length; const xs = [];
-  let x=0; for (let i=0;i<S;i++){ const L=segments[i].L; const sub=m+1; const dx=L/sub; for (let j=0;j<sub;j++){ xs.push(x + j*dx); } x+=L; }
-  xs.push(x);
-  return xs;
+const View = {
+  cam: {
+    distance: 50,
+    azimuth: 35 * Math.PI / 180,   // horizontal rotation
+    elevation: 30 * Math.PI / 180, // vertical rotation
+    centerX: 6,
+    centerY: 5,
+    centerZ: 6
+  },
+  isInteractive: false,
+  dragging: false,
+  dragButton: 0,
+  dragStart: {x:0, y:0, azimuth:0, elevation:0, centerX:0, centerY:0, centerZ:0},
+  hoveredNode: null,
+  pinnedNode: null,
+  hoveredElem: null,
+  pinnedElem: null,
+  selectedSegmentForAnalysis: null,
+  mousePos: {x:0, y:0}
+};
+
+/* =========================
+   DOM
+   ========================= */
+const el = {
+  btnImportNodes: document.getElementById('btnImportNodes'),
+  btnImportElems: document.getElementById('btnImportElems'),
+  btnDraw: document.getElementById('btnDraw'),
+  btnSolve: document.getElementById('btnSolve'),
+  fileNodes: document.getElementById('fileNodes'),
+  fileElems: document.getElementById('fileElems'),
+  taNodes: document.getElementById('taNodes'),
+  taElems: document.getElementById('taElems'),
+  btnParseNodes: document.getElementById('btnParseNodes'),
+  btnParseElems: document.getElementById('btnParseElems'),
+  btnResetNodes: document.getElementById('btnResetNodes'),
+  btnResetElems: document.getElementById('btnResetElems'),
+  log: document.getElementById('log'),
+  summary: document.getElementById('summary'),
+  canvas: document.getElementById('canvas'),
+  status: document.getElementById('status'),
+  selInfo: document.getElementById('selInfo'),
+  defScale: document.getElementById('defScale'),
+  defScaleLabel: document.getElementById('defScaleLabel'),
+  defScaleInput: document.getElementById('defScaleInput'),
+  defScaleMax: document.getElementById('defScaleMax'),
+  defScaleMaxInput: document.getElementById('defScaleMaxInput'),
+  btnSetMaxScale: document.getElementById('btnSetMaxScale'),
+  stressContent: document.getElementById('stressContent'),
+  stressViewSelector: document.getElementById('stressViewSelector')
+
+  btnExportJSON: document.getElementById('btnExportJSON'),
+  btnImportJSON: document.getElementById('btnImportJSON'),
+  btnExportCSV:  document.getElementById('btnExportCSV'),
+  fileImportJSON: document.getElementById('fileImportJSON'),
+};
+const ctx = el.canvas.getContext('2d');
+
+/* =========================
+   Canvas sizing
+   ========================= */
+function resizeCanvas(){
+  const rect = el.canvas.getBoundingClientRect();
+  el.canvas.width = rect.width;
+  el.canvas.height = rect.height;
+  if(Model.isDrawn) drawPrimary();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+/* =========================
+   Logging
+   ========================= */
+function logClear(){ el.log.textContent = ""; }
+function logLine(msg, cls=null){
+  const d = document.createElement('div');
+  d.textContent = msg;
+  if(cls) d.className = cls;
+  el.log.appendChild(d);
+  el.log.scrollTop = el.log.scrollHeight;
+}
+function setStatus(msg){ el.status.textContent = msg; }
+function badge(text){
+  const b = document.createElement('span');
+  b.className = 'badge';
+  b.textContent = text;
+  return b;
+}
+function renderSummary(){
+  const n = Model.nodes.length;
+  const m = Model.elems.length;
+  const prescribed = Model.nodes.reduce((acc,nd)=>acc +
+    (nd.ux.prescribed?1:0)+(nd.uy.prescribed?1:0)+(nd.uz.prescribed?1:0)+
+    (nd.rx.prescribed?1:0)+(nd.ry.prescribed?1:0)+(nd.rz.prescribed?1:0), 0);
+  const loads = Model.nodes.reduce((acc,nd)=>acc + 
+    ((nd.loads.fx||0)!==0?1:0)+((nd.loads.fy||0)!==0?1:0)+((nd.loads.fz||0)!==0?1:0), 0);
+
+  el.summary.innerHTML = "";
+  el.summary.appendChild(badge(`Nodes: ${n}`));
+  el.summary.appendChild(badge(`Segments: ${m}`));
+  el.summary.appendChild(badge(`Prescribed DOF: ${prescribed}`));
+  el.summary.appendChild(badge(`Load terms: ${loads}`));
+
+  if(Model.lastSolution){
+    const exN = Model.lastSolution.expanded.nodes.length;
+    const exE = Model.lastSolution.expanded.elems.length;
+    el.summary.appendChild(badge(`Expanded: ${exN} nodes, ${exE} segs`));
+  }
 }
 
-function assembleMK(includeDropMassIdx, g){
-  const m = getRefine();
-  const S = segments.length; 
-  const Nn_ref = S * (m + 1) + 1;
-  const dofPerNode = 2; const N = dofPerNode * Nn_ref;
-  const M = numeric.rep([N, N], 0); const K = numeric.rep([N, N], 0);
-  for (let i = 0; i < S; i++) {
-    const seg = segments[i];
-    const EI = seg.E * seg.I;
-    const mu = (seg.rho / g) * seg.A; 
-    const sub = m + 1; const Lsub = seg.L / sub; const startRef = i * (m + 1);
-    const kcoef = EI / (Lsub*Lsub*Lsub);
-    const a = 12*kcoef, b = 6*Lsub*kcoef, c = 4*Lsub*Lsub*kcoef, d = 2*Lsub*Lsub*kcoef;
-    for (let j = 0; j < sub; j++) {
-      const n1 = startRef + j, n2 = n1 + 1;
-      const dofs = [ 2*n1, 2*n1+1, 2*n2, 2*n2+1 ];
-      const kk = [ [ a,  b, -a,  b], [ b,  c, -b,  d], [ -a, -b,  a, -b], [ b,  d, -b,  c] ];
-      for (let r=0;r<4;r++){ const Kr = kk[r]; for (let s=0;s<4;s++) K[dofs[r]][dofs[s]] += Kr[s]; }
-      const cfac = (mu * Lsub) / 420; const L = Lsub;
-      const mLoc = [ [156, 22*L, 54, -13*L], [22*L, 4*L*L, 13*L, -3*L*L], [54, 13*L, 156, -22*L], [-13*L, -3*L*L, -22*L, 4*L*L] ];
-      for (let r=0;r<4;r++){ const Mr = mLoc[r]; for (let s=0;s<4;s++) M[dofs[r]][dofs[s]] += Mr[s]*cfac; }
-    }
-  }
-  for (let p=0; p<nodes.length; p++){
-    const refIdx = p * (m + 1); const v = 2*refIdx, r = 2*refIdx+1;
-    const Kv = Number(nodes[p].Kv)||0; const Kr = Number(nodes[p].Kr)||0;
-    if (Kv) K[v][v] += Kv; if (Kr) K[r][r] += Kr;
-  }
-  if (includeDropMassIdx != null){
-    const v = includeDropMassIdx;
-    const W = Number(nodes[Math.round(v/2/(m+1))]?.W)||0;
-    if (W){ M[v][v] += W / g; }
-  }
-  return { M, K, N };
+function pad2(n){ return String(n).padStart(2,'0'); }
+function timestampForFilename(d=new Date()){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
 }
 
-function simulateDrop(){
-  // Check library
-  if(typeof numeric === 'undefined') { Swal.fire('Error','Numeric.js library not loaded. Check internet connection.','error'); return; }
-
-  console.time('simulateDrop');
-  lastSim = null;
-
-  if (!segments.length) { buildBeam(); return; }
-  const dropNode = nodes.findIndex(nd => (Number(nd.H)||0) > 0);
-  if (dropNode < 0){ Swal.fire('Set drop height','Edit a node and set a positive Drop H.','info'); return; }
-  const W = Number(nodes[dropNode].W)||0; if (W <= 0){ Swal.fire('Missing weight','The drop node needs a positive W (lbf).','info'); return; }
-  const bc = nodes[dropNode].bc; if (bc === 'pinned' || bc === 'fixed'){ Swal.fire('Unsupported location','Drop node vertical DOF is constrained by support. Choose a free node.','error'); return; }
-
-  const g = parseFloat(document.getElementById("gravityInput").value) || 386;
-  const H = Math.max(0, Number(nodes[dropNode].H)||0);
-  const vImpact = Math.sqrt(2*g*H);
-  const m_drop = W / g;
-
-  (function setupPreDrop(){
-    const Npre = anim.preN || 60;
-    const tFall = (H > 0 && g > 0) ? Math.sqrt(2 * H / g) : 0;
-    anim.tFall = tFall;
-    anim.preYs = [];
-    for (let k = 0; k < Npre; k++) {
-      const tau = (Npre === 1) ? 0 : (k / (Npre - 1));
-      const t_pre = tau * tFall;
-      let y_phys = H - 0.5 * g * t_pre * t_pre;
-      if (y_phys < 0) y_phys = 0;
-      const yNorm = (H > 0) ? (y_phys / H) : 0;
-      anim.preYs.push(yNorm);
-    }
-  })();
-
-  const m = getRefine();
-  const S = segments.length; 
-  const dropRef = dropNode * (m + 1);
-  const dropVGlob = 2*dropRef;
-
-  const { M: M_beam, K, N } = assembleMK(null, g);
-
-  const constrained = new Set();
-  for (let p=0; p<nodes.length; p++){
-    const b = nodes[p].bc; const refIdx = p * (m + 1); const v = 2*refIdx, r = 2*refIdx+1;
-    if (b === 'fixed' || b === 'pinned') { constrained.add(v); if (b === 'fixed') constrained.add(r); }
-  }
-  const free = []; for (let i=0;i<N;i++){ if(!constrained.has(i)) free.push(i); }
-  if (!free.length) { Swal.fire("Error", "All DOFs are constrained."); return; }
-
-  const Mred_beam = submat(M_beam, free);
-  const Kred = submat(K, free);
-  let Minv_beam; try { Minv_beam = numeric.inv(Mred_beam); } catch(e){ Swal.fire('Error','M is singular (beam). Check density/area.','error'); return; }
-
-  const dropIdx = free.indexOf(dropVGlob);
-  if (dropIdx < 0){ Swal.fire('Unsupported location','Chosen drop node is constrained in reduced system.','error'); return; }
-
-  const ei = new Array(free.length).fill(0); ei[dropIdx] = 1;
-  const m_eff = 1 / numeric.dot([ei], numeric.dot(Minv_beam, ei))[0];
-
-  let dt = parseFloat(document.getElementById('dtInput').value);
-  let T  = parseFloat(document.getElementById('durInput').value);
-  const zeta_all = Math.max(0, parseFloat(document.getElementById('zetaInput').value)||0) / 100.0;
-  if (!isFinite(dt) || dt <= 0) { Swal.fire('Invalid Δt', 'Provide a positive time step.', 'error'); return; }
-  if (!isFinite(T)  || T  <= 0) { Swal.fire('Invalid duration', 'Provide a positive total time.', 'error'); return; }
-
-  const mode = document.getElementById('impactMode').value;
-  const e = Math.max(0, Math.min(1, parseFloat(document.getElementById('eInput').value)||0));
-
-  let J;
-  if (mode === 'stick') {
-    J = (m_eff * m_drop / (m_eff + m_drop)) * vImpact;
-  } else {
-    J = (1 + e) * (m_eff * m_drop / (m_eff + m_drop)) * vImpact;
-  }
-
-  let q0 = Array(free.length).fill(0);
-  let v0 = numeric.dot(Minv_beam, ei.map(x=> x*J));
-
-  let M_used = M_beam; let F_full = new Array(N).fill(0);
-  if (mode === 'stick'){
-    M_used = numeric.clone(M_beam);
-    M_used[dropVGlob][dropVGlob] += m_drop;
-    F_full[dropVGlob] += W;
-  }
-
-  const Mred = submat(M_used, free);
-
-  let A; try { A = numeric.dot(numeric.inv(Mred), Kred); } catch(e){ Swal.fire('Error','M is singular during modal decomposition.','error'); return; }
-  let eig; try { eig = numeric.eig(A); } catch(e){ Swal.fire('Error','Eigen decomposition failed; try fewer segments or larger Δt.','error'); return; }
-  const vals = eig.lambda.x; const vecsR = eig.E.x;
-
-  const pairs = [];
-  for (let j=0;j<vals.length;j++){
-    if (Math.abs(eig.lambda.y?.[j]||0) < 1e-8 && vals[j] > 1e-12){
-      const phi = vecsR.map(row => row[j]);
-      const m_j = numeric.dot([phi], numeric.dot(Mred, phi))[0];
-      if (m_j <= 0 || !isFinite(m_j)) continue;
-      const phi_n = phi.map(v => v / Math.sqrt(m_j));
-      const w2 = numeric.dot([phi_n], numeric.dot(Kred, phi_n))[0];
-      const w = Math.sqrt(Math.max(w2, 0));
-      if (isFinite(w)) pairs.push({ w, phi: phi_n });
-    }
-  }
-  pairs.sort((a,b)=> a.w - b.w);
-  const p = Math.min(8, pairs.length);
-  if (p === 0){ Swal.fire('Error','No usable modes found.','error'); return; }
-  const Wvec = new Array(p); const PHI = new Array(p);
-  for (let j=0;j<p;j++){ Wvec[j] = pairs[j].w; PHI[j] = pairs[j].phi; }
-
-  function Mmul(vec){ return numeric.dot(Mred, vec); }
-  function PHIT_M_vec(vec){
-    const Mv = Mmul(vec); const y = new Array(p).fill(0);
-    for (let j=0;j<p;j++) y[j] = numeric.dot([PHI[j]], Mv)[0];
-    return y;
-  }
-  function PHI_times_y(y){
-    const q = new Array(free.length).fill(0);
-    for (let j=0;j<p;j++){
-      const cj = y[j]; if (!cj) continue;
-      const ph = PHI[j]; for (let i=0;i<q.length;i++) q[i] += ph[i]*cj;
-    }
-    return q;
-  }
-  const Fred = free.map(i => F_full[i]||0);
-  const f_modal = (function(){
-    const y = new Array(p).fill(0);
-    const FF = Fred;
-    for (let j=0;j<p;j++) y[j] = numeric.dot([PHI[j]], FF)[0];
-    return y;
-  })();
-
-  const y0  = new Array(p).fill(0);
-  const yd0 = PHIT_M_vec(v0);
-
-  const steps = Math.max(10, Math.floor(T/dt));
-  if (steps > 200000) { Swal.fire('Too many steps', `T/dt = ${steps.toLocaleString()} steps. Increase Δt or reduce T.`, 'warning'); return; }
-
-  const ts = new Array(steps+1); const ys_drop = new Array(steps+1);
-  ts[0] = 0;
-
-  let y = y0.slice();
-  let yd = yd0.slice();
-
-  function sdofAcc(j, yj, ydj){ return f_modal[j] - 2*zeta_all*Wvec[j]*ydj - (Wvec[j]*Wvec[j])*yj; }
-
-  stopAnimation();
-  const xsRef = computeRefinedXs();
-  const frames = []; const times = [];
-  let maxAbs = 0; const stride = Math.max(1, Math.floor(steps/300));
-
-  const Nglob = 2 * xsRef.length;
-  const mapRed = new Int32Array(Nglob).fill(-1);
-  for (let i = 0; i < free.length; i++) mapRed[free[i]] = i;
-  const drop_r = free.indexOf(dropVGlob);
-
-  const nodeNames = Array(nodes.length).fill(0).map((_,i)=>`w_node${i}`);
-  const nodeW = Array(nodes.length).fill(0).map(()=> new Array(steps+1).fill(0));
-
-  let massY = new Array(steps+1).fill(0);
-  let v_m_post = 0;
-  if (mode === 'bounce'){
-    v_m_post = ((m_drop - e*m_eff)/(m_drop + m_eff)) * vImpact;
-  }
-
-  let q = PHI_times_y(y);
-  ys_drop[0] = (drop_r>=0 ? q[drop_r] : 0);
-  for (let pnode=0;pnode<nodes.length;pnode++){
-    const ref = pnode*(m+1); const gi = 2*ref; const ri = mapRed[gi];
-    nodeW[pnode][0] = (ri>=0 ? q[ri] : 0);
-  }
-
-  for (let k=0; k<steps; k++){
-    const k1y  = yd.slice();
-    const k1yd = y.map((yj,j)=> sdofAcc(j, y[j], yd[j]));
-    const y2  = y.map((yj,j)=> yj  + 0.5*dt*k1y[j]);
-    const yd2 = yd.map((vj,j)=> vj + 0.5*dt*k1yd[j]);
-    const k2y  = yd2;
-    const k2yd = y2.map((yj,j)=> sdofAcc(j, y2[j], yd2[j]));
-    const y3  = y.map((yj,j)=> yj  + 0.5*dt*k2y[j]);
-    const yd3 = yd.map((vj,j)=> vj + 0.5*dt*k2yd[j]);
-    const k3y  = yd3;
-    const k3yd = y3.map((yj,j)=> sdofAcc(j, y3[j], yd3[j]));
-    const y4  = y.map((yj,j)=> yj  + dt*k3y[j]);
-    const yd4 = yd.map((vj,j)=> vj + dt*k3yd[j]);
-    const k4y  = yd4;
-    const k4yd = y4.map((yj,j)=> sdofAcc(j, y4[j], yd4[j]));
-
-    for (let j=0;j<p;j++){
-      y[j]  += (dt/6)*(k1y[j]  + 2*k2y[j]  + 2*k3y[j]  + k4y[j]);
-      yd[j] += (dt/6)*(k1yd[j] + 2*k2yd[j] + 2*k3yd[j] + k4yd[j]);
-    }
-    const tnext = (k+1)*dt; ts[k+1] = tnext;
-    q = PHI_times_y(y);
-    ys_drop[k+1] = (drop_r>=0 ? q[drop_r] : 0);
-
-    for (let pnode=0;pnode<nodes.length;pnode++){
-      const ref = pnode*(m+1); const gi = 2*ref; const ri = mapRed[gi];
-      nodeW[pnode][k+1] = (ri>=0 ? q[ri] : 0);
-    }
-    if (mode === 'bounce'){
-      massY[k+1] = v_m_post * tnext - 0.5 * g * tnext * tnext;
-    }
-    if (k % stride === 0 || k === steps-1){
-      const Nn_ref = xsRef.length; const w = new Float32Array(Nn_ref);
-      for (let n=0;n<Nn_ref;n++){
-        const gi = 2*n; const ri = mapRed[gi];
-        w[n] = (ri>=0)? q[ri] : 0; 
-        maxAbs = Math.max(maxAbs, Math.abs(w[n]));
-      }
-      frames.push(w); times.push(tnext);
-    }
-  }
-
-  renderDropSummary({ node: dropNode, H, vImpact, dt, T, peak: Math.max(...ys_drop.map(Math.abs)), mode, e, zeta_all });
-  drawTimeHistory(ts, ys_drop);
-
-  const margin = MARGIN_X; 
-  const totalL = segments.reduce((s,seg)=> s+seg.L, 0) || 1; 
-  const scaleX = (document.getElementById('animCanvas').width - 2*margin)/totalL;
-  anim.frames = frames;
-  anim.times = times;
-  anim.xs = xsRef;
-  anim.maxAbs = maxAbs || 1;
-  anim.idx = 0;
-  anim.mode = mode;
-  anim.dropRef = dropRef;
-  anim.g = g;
-  anim.massY = (mode==='bounce')
-    ? massY.filter((_,i)=> (i % Math.max(1, Math.floor(steps/frames.length))) === 0)
-    : new Array(frames.length).fill(0);
-  anim.dropXpx = margin + (xsRef[dropRef]||0) * scaleX;
-
-  startAnimation();
-  lastSim = { ts, wDrop: ys_drop, nodeNames, nodeW };
-  console.timeEnd('simulateDrop');
-}
-
-function computeFirstMode(){
-  if(typeof numeric === 'undefined') { Swal.fire('Error','Numeric.js library not loaded','error'); return; }
-  
-  const outEl = document.getElementById('freqOutput');
-  if (outEl) outEl.value = '';
-  if (!segments.length) { buildBeam(); }
-  const g = parseFloat(document.getElementById("gravityInput").value) || 386;
-  const { M, K, N } = assembleMK(null, g);
-  const mRef = getRefine();
-  const constrained = new Set();
-  for (let p=0; p<nodes.length; p++){
-    const b = nodes[p].bc;
-    const refIdx = p * (mRef + 1);
-    const v = 2*refIdx;
-    const r = 2*refIdx + 1;
-    if (b === 'fixed' || b === 'pinned') constrained.add(v);
-    if (b === 'fixed') constrained.add(r);
-  }
-  const free = []; for (let i=0; i<N; i++){ if (!constrained.has(i)) free.push(i); }
-  if (!free.length){ Swal.fire('Error','All DOFs are constrained; cannot compute modes.','error'); return; }
-  const Mred = submat(M, free);
-  const Kred = submat(K, free);
-  let A, eig;
-  try { const Minv = numeric.inv(Mred); A = numeric.dot(Minv, Kred); eig = numeric.eig(A); } catch (e){ Swal.fire('Error','Failed to compute eigenvalues.','error'); return; }
-  const lamR = eig.lambda.x; const lamI = eig.lambda.y || [];
-  let w1 = null;
-  for (let i=0; i<lamR.length; i++){
-    const re = lamR[i]; const im = lamI[i] || 0;
-    if (Math.abs(im) > 1e-6) continue;
-    if (re <= 1e-8) continue;
-    const w = Math.sqrt(re);
-    if (!isFinite(w)) continue;
-    if (w1 === null || w < w1) w1 = w;
-  }
-  if (w1 === null){ Swal.fire('Error','No positive real eigenvalues found.','error'); return; }
-  const f1 = w1 / (2*Math.PI);
-  if (outEl){ outEl.value = f1.toFixed(3); outEl.title = `ω₁ ≈ ${w1.toFixed(3)} rad/s`; }
-}
-
-function startAnimation(){
-  const btn = document.getElementById('btnAnimToggle');
-  const status = document.getElementById('animStatus');
-  const totalFrames = (anim.preYs?.length || 0) + anim.frames.length;
-  if (!totalFrames){ status.textContent='(no frames)'; return; }
-  if (anim.running) return;
-  anim.running = true;
-  btn.textContent = 'Pause';
-  status.textContent = '';
-  const step = () => {
-    if (!anim.running) return;
-    drawAnimFrame(Math.floor(anim.idx));
-    anim.idx += Math.max(0.01, anim.speed);
-    if (anim.idx >= totalFrames) anim.idx = 0;
-    anim.rafId = requestAnimationFrame(step);
-  };
-  anim.rafId = requestAnimationFrame(step);
-}
-function stopAnimation(){
-  if (anim.running){ cancelAnimationFrame(anim.rafId); anim.running=false; }
-  const btn=document.getElementById('btnAnimToggle');
-  if (btn) btn.textContent='Play';
-}
-
-function autoUpdateTimeSteps() {
-  if(typeof numeric === 'undefined') return;
-  
-  if (!segments.length) return;
-  
-  const g = parseFloat(document.getElementById("gravityInput").value) || 386;
-  const { M, K, N } = assembleMK(null, g);
-  const mRef = getRefine();
-  const constrained = new Set();
-  
-  for (let p=0; p<nodes.length; p++){
-    const b = nodes[p].bc;
-    const refIdx = p * (mRef + 1);
-    const v = 2*refIdx;
-    const r = 2*refIdx + 1;
-    if (b === 'fixed' || b === 'pinned') constrained.add(v);
-    if (b === 'fixed') constrained.add(r);
-  }
-  
-  const free = []; 
-  for (let i=0; i<N; i++){ 
-    if (!constrained.has(i)) free.push(i); 
-  }
-  
-  if (!free.length) return;
-  
-  const Mred = submat(M, free);
-  const Kred = submat(K, free);
-  
-  let A, eig;
-  try { 
-    const Minv = numeric.inv(Mred); 
-    A = numeric.dot(Minv, Kred); 
-    eig = numeric.eig(A); 
-  } catch (e){ 
-    return; 
-  }
-  
-  const lamR = eig.lambda.x; 
-  const lamI = eig.lambda.y || [];
-  let w1 = null;
-  
-  for (let i=0; i<lamR.length; i++){
-    const re = lamR[i]; 
-    const im = lamI[i] || 0;
-    if (Math.abs(im) > 1e-6) continue;
-    if (re <= 1e-8) continue;
-    const w = Math.sqrt(re);
-    if (!isFinite(w)) continue;
-    if (w1 === null || w < w1) w1 = w;
-  }
-  
-  if (w1 === null) return;
-  
-  const f1 = w1 / (2 * Math.PI);
-  const T1 = 1 / f1;  // Period
-  
-  // Update Δt to (1/freq)/500 = T1/500
-  const newDt = T1 / 500;
-  document.getElementById('dtInput').value = newDt.toFixed(6);
-  
-  // Update T to (1/freq)×4 = T1×4
-  const newDur = T1 * 4;
-  document.getElementById('durInput').value = newDur.toFixed(3);
-}
-
-
-
-function drawAnimFrame(i){
-  const canvas = document.getElementById('animCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width, canvas.height);
-
-  const margin = MARGIN_X;
-  const midY = canvas.height/2;
-  const totalL = segments.reduce((s,seg)=> s+seg.L, 0) || 1;
-  const scaleX = (canvas.width - 2*margin)/totalL;
-  const Npre = anim.preYs ? anim.preYs.length : 0;
-  const defaultX = margin + 0.1 * totalL * scaleX;
-  const Xc = anim.dropXpx || defaultX;
-
-  // Pre-drop
-  if (i < Npre && Npre > 0) {
-    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(margin, midY); ctx.lineTo(margin + totalL * scaleX, midY); ctx.stroke();
-    const yNorm = anim.preYs[i];
-    const Yimpact = midY;
-    const topOffset = canvas.height * 0.35;
-    const Ytop = midY - topOffset;
-    const Ymass = Yimpact + (Ytop - Yimpact) * yNorm;
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(Xc, Ymass, 16, 0, Math.PI * 2); ctx.fill();
-    return;
-  }
-
-  // Beam Response
-  const j = Math.max(0, i - Npre);
-  const frameIdx = Math.min(j, anim.frames.length - 1);
-  const xs = anim.xs;
-  const w = anim.frames[frameIdx];
-
-  if (!w || !xs || !xs.length) return;
-  const scaleY = (canvas.height*0.40) / anim.maxAbs;
-
-  // Static Reference Line
-  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(margin, midY); ctx.lineTo(margin + totalL*scaleX, midY); ctx.stroke();
-  
-  // Deflected Beam (Keep this BLUE for visibility against gray segments)
-  ctx.strokeStyle = '#1976D2'; ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (let k=0;k<xs.length;k++){
-    const X = margin + xs[k]*scaleX;
-    const Y = midY - w[k]*scaleY;
-    if (k===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
-  }
-  ctx.stroke();
-
-  const wNode = w[anim.dropRef] || 0;
-  let Ymass = midY - wNode*scaleY;
-  if (anim.mode === 'bounce'){
-    const idx = Math.min(frameIdx, anim.massY.length-1);
-    Ymass = midY - (wNode + anim.massY[idx]) * scaleY;
-  }
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(Xc, Ymass, 16, 0, Math.PI*2); ctx.fill();
-
-  const t = (anim.times && anim.times.length) ? anim.times[Math.max(0, Math.min(frameIdx, anim.times.length-1))] : 0;
-  const label = `t = ${Number(t).toFixed(3)} s`;
-  ctx.font = '12px sans-serif';
-  const pad = 6; const boxH = 18; const wText = ctx.measureText(label).width;
-  const boxW = wText + 2*pad; const x = canvas.width - boxW - 10; const y = 10;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(x, y, boxW, boxH);
-  ctx.strokeStyle = '#444'; ctx.strokeRect(x, y, boxW, boxH);
-  ctx.fillStyle = '#000'; ctx.fillText(label, x + pad, y + boxH - 6);
-}
-
-function renderDropSummary(info){
-  const div = document.getElementById('dropSummary');
-  if (!info){ div.textContent=''; return; }
-  div.innerHTML = `<strong>Drop Simulation:</strong> H=${info.H.toFixed(3)}, v₀=${info.vImpact.toFixed(3)}, e=${info.e.toFixed(2)}, dt=${info.dt.toExponential(2)}, T=${info.T.toFixed(2)}, ζ=${(info.zeta_all*100).toFixed(1)}%, peak |w|≈${info.peak.toFixed(4)}`;
-}
-
-function drawTimeHistory(ts, ys){
-  const el = document.getElementById('timePlot');
-  const ctx = el.getContext('2d');
-  if (timeChart){ timeChart.destroy(); timeChart = null; }
-  if (!ts.length){ ctx.clearRect(0,0,el.width, el.height); return; }
-  const series = ts.map((t,i)=> ({ x: +t, y: ys[i] }));
-  timeChart = new Chart(ctx, {
-    type: 'line',
-    data: { datasets: [{ label: 'w_drop (at node)', data: series, borderWidth: 2, pointRadius: 0, fill:false }] },
-    options: {
-      responsive:false,
-      scales: { x:{ type:'linear', title:{ display:true, text:'time (s)' } }, y:{ title:{ display:true, text:'deflection'} } },
-      plugins:{ tooltip:{ callbacks:{ label:(ctx)=>`w = ${Number(ctx.parsed.y).toFixed(4)}`, title:(items)=>`t = ${Number(items[0]?.parsed?.x).toFixed(3)} s` } } }
-    }
-  });
-}
-
-// ===== JSON Export =====
-function exportJSON() {
-  const data = {
-    timestamp: new Date().toISOString(),
-    dateString: new Date().toLocaleString(),
-    inputs: {
-      numSegments: document.getElementById('numSegments').value,
-      gravity: document.getElementById('gravityInput').value,
-      dt: document.getElementById('dtInput').value,
-      dur: document.getElementById('durInput').value,
-      impactMode: document.getElementById('impactMode').value,
-      e: document.getElementById('eInput').value,
-      zeta: document.getElementById('zetaInput').value
-    },
-    segments: segments,
-    nodes: nodes
-  };
-  const jsonStr = JSON.stringify(data, null, 2);
-  const blob = new Blob([jsonStr], { type: 'application/json' });
+function downloadBlob(blob, filename){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `beam_drop_data_${new Date().getTime()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 250);
 }
 
-// ===== JSON Import =====
-function triggerImportJSON() {
-  document.getElementById('fileInput').click();
-}
-
-function handleFileSelect(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      
-      // Update Inputs
-      if(data.inputs) {
-        if(data.inputs.numSegments) document.getElementById('numSegments').value = data.inputs.numSegments;
-        if(data.inputs.gravity) document.getElementById('gravityInput').value = data.inputs.gravity;
-        if(data.inputs.dt) document.getElementById('dtInput').value = data.inputs.dt;
-        if(data.inputs.dur) document.getElementById('durInput').value = data.inputs.dur;
-        if(data.inputs.impactMode) document.getElementById('impactMode').value = data.inputs.impactMode;
-        if(data.inputs.e) document.getElementById('eInput').value = data.inputs.e;
-        if(data.inputs.zeta) document.getElementById('zetaInput').value = data.inputs.zeta;
-        
-        document.getElementById('impactMode').dispatchEvent(new Event('change'));
-      }
-
-      // Restore Arrays
-      if(data.segments && Array.isArray(data.segments)) segments = data.segments;
-      if(data.nodes && Array.isArray(data.nodes)) nodes = data.nodes;
-
-      // Redraw
-      safeDrawBeam();
-      drawTimeHistory([], []); 
-      renderDropSummary(null);
-      
-      document.getElementById('fileInput').value = '';
-
-      Swal.fire({
-        title: 'Import Successful',
-        text: `Loaded data from ${data.dateString || 'JSON file'}`,
-        icon: 'success',
-        timer: 2000,
-        showConfirmButton: false
-      });
-
-    } catch (err) {
-      Swal.fire('Import Error', 'Invalid JSON file.', 'error');
-      console.error(err);
+function buildExportState(){
+  // Keep it explicit + stable. This is what your Import expects.
+  return {
+    schema: "xl4sim.frame3d.json.v1",
+    exportedAtISO: new Date().toISOString(),
+    unitSystem: UNIT_SYSTEM,          // "imperial" or "metric"
+    defScaleMax: Number(el.defScale.max || 200),
+    nodesText: el.taNodes.value || "",
+    elemsText: el.taElems.value || "",
+    // Optional: camera/view persistence (nice UX)
+    view: {
+      cam: {...View.cam}
     }
   };
-  reader.readAsText(file);
 }
 
-// ===== CSV Export =====
-function exportCSV(){
-  if (!lastSim){ Swal.fire('No data','Run a simulation first.','info'); return; }
-  const { ts, wDrop, nodeNames, nodeW } = lastSim;
-  
-  const rows = [`Simulation Date: ${new Date().toLocaleString()}`];
-  
-  const headers = ['time','w_drop', ...nodeNames];
-  rows.push(headers.join(','));
-
-  for (let i=0;i<ts.length;i++){
-    const row = [ts[i], wDrop[i]];
-    for (let n=0;n<nodeW.length;n++) row.push(nodeW[n][i]);
-    rows.push(row.join(','));
+function applyImportedState(obj){
+  if(!obj || typeof obj !== 'object') throw new Error("Invalid JSON object.");
+  if(obj.schema !== "xl4sim.frame3d.json.v1"){
+    // Allow older / unknown schema but warn
+    logLine("WARN: JSON schema mismatch. Attempting to import anyway.", "log-warn");
   }
-  const blob = new Blob([rows.join('\n')], {type: 'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'beam_drop_history.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+  if(typeof obj.unitSystem === "string"){
+    UNIT_SYSTEM = obj.unitSystem;
+  }
+
+  if(Number.isFinite(obj.defScaleMax) && obj.defScaleMax > 0){
+    el.defScale.max = obj.defScaleMax;
+    el.defScaleMax.textContent = obj.defScaleMax;
+    el.defScaleMaxInput.value = obj.defScaleMax;
+  }
+
+  if(typeof obj.nodesText === "string") el.taNodes.value = obj.nodesText;
+  if(typeof obj.elemsText === "string") el.taElems.value = obj.elemsText;
+
+  // Sync and redraw
+  syncFromTextareas({nodes:true, elems:true, announce:true});
+
+  // Restore camera if present
+  if(obj.view?.cam){
+    View.cam = {...View.cam, ...obj.view.cam};
+  }
+
+  if(!crossValidate()){
+    setStatus("Fix input");
+    return;
+  }
+
+  View.isInteractive = true;
+  fitView3D(Model.nodes);
+  Model.isDrawn = true;
+  drawPrimary();
+  setStatus("Interactive");
+  logLine("OK: JSON imported and model restored.", "log-ok");
 }
 
-// ===== Helpers =====
-function submat(mat, idx){ return idx.map(i => idx.map(j => mat[i][j])); }
-function vecDot(a,b){ let s=0; for (let i=0;i<a.length;i++) s+=a[i]*b[i]; return s; }
-function l2norm(v){ let s=0; for (let i=0;i<v.length;i++) s+=v[i]*v[i]; return Math.sqrt(s); }
 
-// ===== DOM wiring =====
-document.addEventListener('DOMContentLoaded', () => {
-  beamCanvasEl = document.getElementById('beamCanvas');
-  
-  // Attach Event Listeners
-  attachCanvasHandlers();
-  
-  const btnBuild = document.getElementById('btnBuild');
-  if(btnBuild) btnBuild.addEventListener('click', buildBeam);
-  
-  const btnDrop = document.getElementById('btnDrop');
-  if(btnDrop) btnDrop.addEventListener('click', simulateDrop);
-  
-  const btnExport = document.getElementById('btnExport');
-  if(btnExport) btnExport.addEventListener('click', exportCSV);
-  
-  const btnExportJSON = document.getElementById('btnExportJSON');
-  if(btnExportJSON) btnExportJSON.addEventListener('click', exportJSON);
-  
-  const btnImportJSON = document.getElementById('btnImportJSON');
-  if(btnImportJSON) btnImportJSON.addEventListener('click', triggerImportJSON);
-  
-  const fileInput = document.getElementById('fileInput');
-  if(fileInput) fileInput.addEventListener('change', handleFileSelect);
+/* =========================
+   Parsing utilities
+   ========================= */
+function isBlankToken(t){
+  if(t==null) return true;
+  const s = String(t).trim();
+  return s === "" || s === "." || /^na$/i.test(s);
+}
+function toNumberOrNull(t){
+  if(isBlankToken(t)) return null;
+  const v = Number(String(t).trim());
+  return Number.isFinite(v) ? v : NaN;
+}
+function toNumberOrZero(t){
+  if(isBlankToken(t)) return 0;
+  const v = Number(String(t).trim());
+  return Number.isFinite(v) ? v : NaN;
+}
+function splitLine(line){
+  if(line.includes("\t")) return line.split("\t");
+  if(line.includes(","))  return line.split(",");
+  return line.trim().split(/\s+/);
+}
+function isCommentOrBlank(line){
+  const s = line.trim();
+  return s === "" || s.startsWith("#") || s.startsWith("//");
+}
+function detectHeader(tokens){
+  return tokens.some(t => /[A-Za-z]/.test(String(t)));
+}
+function normalizeHeader(h){
+  return String(h).trim().toLowerCase()
+    .replace(/\s+/g,'')
+    .replace(/_/g,'')
+    .replace(/-/g,'');
+}
+
+/* =========================
+   Parse nodes: node x y z delX delY delZ thetaXX thetaYY thetaZZ Fx Fy Fz
+   ========================= */
+function parseNodes(text){
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  for(const line of lines){
+    if(isCommentOrBlank(line)) continue;
+    const toks = splitLine(line).map(s=>String(s).trim());
+    if(toks.length) rows.push(toks);
+  }
+  if(rows.length === 0) throw new Error("No node data rows found.");
+
+  let headerMap = null, startIdx = 0;
+  if(detectHeader(rows[0])){
+    headerMap = new Map();
+    rows[0].forEach((h,i)=>headerMap.set(normalizeHeader(h), i));
+    startIdx = 1;
+  }
+  const get = (toks, name, idxFallback) => {
+    if(headerMap){
+      const i = headerMap.get(normalizeHeader(name));
+      return (i==null) ? null : toks[i];
+    }
+    return toks[idxFallback];
+  };
+
+  const nodes = [];
+  const seen = new Set();
+  for(let r=startIdx; r<rows.length; r++){
+    const toks = rows[r];
+    const nodeTok = get(toks,"node",0) ?? get(toks,"nodeno",0) ?? toks[0];
+    const id = parseInt(String(nodeTok).trim(), 10);
+    if(!Number.isFinite(id)) throw new Error(`Row ${r+1}: invalid node number "${nodeTok}"`);
+    if(seen.has(id)) throw new Error(`Row ${r+1}: duplicate node number ${id}`);
+    seen.add(id);
+
+    const x = toNumberOrNull(get(toks,"x",1));
+    const y = toNumberOrNull(get(toks,"y",2));
+    const z = toNumberOrNull(get(toks,"z",3));
+    if(!Number.isFinite(x)) throw new Error(`Row ${r+1}: invalid X`);
+    if(!Number.isFinite(y)) throw new Error(`Row ${r+1}: invalid Y`);
+    if(!Number.isFinite(z)) throw new Error(`Row ${r+1}: invalid Z`);
+
+    const dx = toNumberOrNull(get(toks,"delx",4) ?? get(toks,"dx",4));
+    const dy = toNumberOrNull(get(toks,"dely",5) ?? get(toks,"dy",5));
+    const dz = toNumberOrNull(get(toks,"delz",6) ?? get(toks,"dz",6));
+    
+    const thx = toNumberOrNull(get(toks,"thetaxx",7) ?? get(toks,"thxx",7) ?? get(toks,"rx",7));
+    const thy = toNumberOrNull(get(toks,"thetayy",8) ?? get(toks,"thyy",8) ?? get(toks,"ry",8));
+    const thz = toNumberOrNull(get(toks,"thetazz",9) ?? get(toks,"thzz",9) ?? get(toks,"rz",9));
+
+    const fx = toNumberOrZero(get(toks,"fx",10));
+    const fy = toNumberOrZero(get(toks,"fy",11));
+    const fz = toNumberOrZero(get(toks,"fz",12));
+
+    if(!Number.isFinite(fx)) throw new Error(`Row ${r+1}: invalid Fx`);
+    if(!Number.isFinite(fy)) throw new Error(`Row ${r+1}: invalid Fy`);
+    if(!Number.isFinite(fz)) throw new Error(`Row ${r+1}: invalid Fz`);
+    if(dx!==null && !Number.isFinite(dx)) throw new Error(`Row ${r+1}: invalid delX`);
+    if(dy!==null && !Number.isFinite(dy)) throw new Error(`Row ${r+1}: invalid delY`);
+    if(dz!==null && !Number.isFinite(dz)) throw new Error(`Row ${r+1}: invalid delZ`);
+    if(thx!==null && !Number.isFinite(thx)) throw new Error(`Row ${r+1}: invalid thetaXX`);
+    if(thy!==null && !Number.isFinite(thy)) throw new Error(`Row ${r+1}: invalid thetaYY`);
+    if(thz!==null && !Number.isFinite(thz)) throw new Error(`Row ${r+1}: invalid thetaZZ`);
+
+    nodes.push({
+      id, x, y, z,
+      ux: { prescribed: dx!==null, value: dx ?? 0 },
+      uy: { prescribed: dy!==null, value: dy ?? 0 },
+      uz: { prescribed: dz!==null, value: dz ?? 0 },
+      rx: { prescribed: thx!==null, value: thx ?? 0 },
+      ry: { prescribed: thy!==null, value: thy ?? 0 },
+      rz: { prescribed: thz!==null, value: thz ?? 0 },
+      loads: { fx, fy, fz }
+    });
+  }
+  return nodes;
+}
+
+/* =========================
+   Parse elems: elem ni nj E G Izz Iyy Jyz Ayz rho x3 y3 z3
+   ========================= */
+function parseElems(text){
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  for(const line of lines){
+    if(isCommentOrBlank(line)) continue;
+    const toks = splitLine(line).map(s=>String(s).trim());
+    if(toks.length) rows.push(toks);
+  }
+  if(rows.length === 0) throw new Error("No segment data rows found.");
+
+  let headerMap = null, startIdx = 0;
+  if(detectHeader(rows[0])){
+    headerMap = new Map();
+    rows[0].forEach((h,i)=>headerMap.set(normalizeHeader(h), i));
+    startIdx = 1;
+  }
+  const get = (toks, name, idxFallback) => {
+    if(headerMap){
+      const i = headerMap.get(normalizeHeader(name));
+      return (i==null) ? null : toks[i];
+    }
+    return toks[idxFallback];
+  };
+
+  const elems = [];
+  for(let r=startIdx; r<rows.length; r++){
+    const toks = rows[r];
+
+    const elemTok = get(toks,"elem",0) ?? get(toks,"element",0) ?? toks[0];
+    const niTok = get(toks,"ni",1) ?? get(toks,"nodei",1) ?? toks[1];
+    const njTok = get(toks,"nj",2) ?? get(toks,"nodej",2) ?? toks[2];
+    
+    const id = parseInt(String(elemTok).trim(), 10);
+    const ni = parseInt(String(niTok).trim(),10);
+    const nj = parseInt(String(njTok).trim(),10);
+    
+    if(!Number.isFinite(id)) throw new Error(`Row ${r+1}: invalid element number`);
+    if(!Number.isFinite(ni) || !Number.isFinite(nj)) throw new Error(`Row ${r+1}: invalid node i/j`);
+    if(ni === nj) throw new Error(`Row ${r+1}: ni and nj cannot be the same (${ni})`);
+
+    const E = toNumberOrNull(get(toks,"e",3));
+    const G = toNumberOrNull(get(toks,"g",4));
+    const Izz = toNumberOrNull(get(toks,"izz",5));
+    const Iyy = toNumberOrNull(get(toks,"iyy",6));
+    const Jyz = toNumberOrNull(get(toks,"jyz",7) ?? get(toks,"j",7));
+const Ayz = toNumberOrNull(get(toks,"ayz",8) ?? get(toks,"a",8));
+
+// NEW: rho between Ayz and x3
+const rho = toNumberOrZero(get(toks,"rho",9));  // allow blank => 0
+
+const x3 = toNumberOrNull(get(toks,"x3",10));
+const y3 = toNumberOrNull(get(toks,"y3",11));
+const z3 = toNumberOrNull(get(toks,"z3",12));
+
+if(!Number.isFinite(Ayz) || Ayz<=0) throw new Error(`Row ${r+1}: invalid Ayz (must be > 0)`);
+if(!Number.isFinite(rho) || rho<0)  throw new Error(`Row ${r+1}: invalid rho (must be >= 0)`);
+if(!Number.isFinite(x3)) throw new Error(`Row ${r+1}: invalid x3`);
+if(!Number.isFinite(y3)) throw new Error(`Row ${r+1}: invalid y3`);
+if(!Number.isFinite(z3)) throw new Error(`Row ${r+1}: invalid z3`);
+
+elems.push({ id, ni, nj, E, G, Izz, Iyy, Jyz, Ayz, rho, x3, y3, z3 });
+
+  }
+  return elems;
+}
+
+/* =========================
+   Install / invalidate
+   ========================= */
+function invalidateSolutionAndDefScale(){
+  Model.lastSolution = null;
+  el.defScale.value = 0;
+  el.defScaleInput.value = 0;
+  el.defScale.disabled = true;
+  el.defScaleInput.disabled = true;
+  el.btnExportCSV.disabled = true;
+}
 
 
-  const btnAnim = document.getElementById('btnAnimToggle');
-  const rng = document.getElementById('animSpeed');
-  if(btnAnim) btnAnim.addEventListener('click', ()=>{ if (anim.running) stopAnimation(); else startAnimation(); });
-  if(rng) {
-    rng.addEventListener('input', ()=>{ anim.speed = parseFloat(rng.value)||0.5; });
-    anim.speed = parseFloat(rng.value)||0.5;
+function installNodes(nodes){
+  Model.nodes = nodes;
+  Model.nodeById = new Map(nodes.map(n=>[n.id,n]));
+  
+  // Debug: log Node 1's BCs
+  const node1 = nodes.find(n => n.id === 1);
+  if(node1){
+    console.log("Node 1 BCs after parsing:");
+    console.log(`  ux: prescribed=${node1.ux.prescribed}, value=${node1.ux.value}`);
+    console.log(`  uy: prescribed=${node1.uy.prescribed}, value=${node1.uy.value}`);
+    console.log(`  uz: prescribed=${node1.uz.prescribed}, value=${node1.uz.value}`);
+    console.log(`  rx: prescribed=${node1.rx.prescribed}, value=${node1.rx.value}`);
+    console.log(`  ry: prescribed=${node1.ry.prescribed}, value=${node1.ry.value}`);
+    console.log(`  rz: prescribed=${node1.rz.prescribed}, value=${node1.rz.value}`);
+  }
+  
+  Model.isDrawn = false;
+  View.hoveredNode = null;
+  View.pinnedNode = null;
+  View.hoveredElem = null;
+  View.pinnedElem = null;
+  invalidateSolutionAndDefScale();
+}
+function installElems(elems){
+  Model.elems = elems;
+  Model.elemById = new Map(elems.map(e=>[e.id,e]));
+  Model.isDrawn = false;
+  View.hoveredNode = null;
+  View.pinnedNode = null;
+  View.hoveredElem = null;
+  View.pinnedElem = null;
+  invalidateSolutionAndDefScale();
+}
+function crossValidate(){
+  let ok = true;
+  for(const e of Model.elems){
+    if(!Model.nodeById.has(e.ni)){ logLine(`ERROR: Segment ${e.id} references missing node ${e.ni}`, "log-err"); ok=false; }
+    if(!Model.nodeById.has(e.nj)){ logLine(`ERROR: Segment ${e.id} references missing node ${e.nj}`, "log-err"); ok=false; }
+  }
+  return ok;
+}
+function updateButtons(){
+  const haveData = (Model.nodes.length>0 && Model.elems.length>0);
+  el.btnDraw.disabled = !haveData;
+  el.btnSolve.disabled = !haveData;
+}
+
+/* =========================
+   Sync from textareas
+   ========================= */
+function syncFromTextareas({nodes=true, elems=true, announce=false} = {}){
+  const newNodes = nodes ? parseNodes(el.taNodes.value || "") : null;
+  const newElems = elems ? parseElems(el.taElems.value || "") : null;
+
+  if(nodes) installNodes(newNodes);
+  if(elems) installElems(newElems);
+
+  if(announce){
+    if(nodes) logLine("OK: Synced Nodes from textarea.", "log-ok");
+    if(elems) logLine("OK: Synced Segments from textarea.", "log-ok");
   }
 
-  const modeSel = document.getElementById('impactMode');
-  const eInput = document.getElementById('eInput');
-  const setEState = ()=>{ eInput.disabled = (modeSel.value !== 'bounce'); };
-  if(modeSel) modeSel.addEventListener('change', setEState); 
-  setEState();
+  renderSummary();
+  updateButtons();
+}
 
-  // Initial Build
-  buildBeam();
+/* =========================
+   3D Camera & Projection
+   ========================= */
+function project3D(x, y, z){
+  // Simple perspective projection
+  const cam = View.cam;
+  
+  // Camera position in spherical coordinates
+  const camX = cam.centerX + cam.distance * Math.cos(cam.elevation) * Math.cos(cam.azimuth);
+  const camY = cam.centerY + cam.distance * Math.cos(cam.elevation) * Math.sin(cam.azimuth);
+  const camZ = cam.centerZ + cam.distance * Math.sin(cam.elevation);
+  
+  // Vector from camera to point
+  const dx = x - camX;
+  const dy = y - camY;
+  const dz = z - camZ;
+  
+  // Camera basis vectors (simplified - looking at center point)
+  const toCenter = {
+    x: cam.centerX - camX,
+    y: cam.centerY - camY,
+    z: cam.centerZ - camZ
+  };
+  const dist = Math.sqrt(toCenter.x**2 + toCenter.y**2 + toCenter.z**2);
+  const forward = {
+    x: toCenter.x / dist,
+    y: toCenter.y / dist,
+    z: toCenter.z / dist
+  };
+  
+  // Right vector (cross product of forward and world up)
+  const worldUp = {x: 0, y: 0, z: 1};
+  const right = {
+    x: forward.y * worldUp.z - forward.z * worldUp.y,
+    y: forward.z * worldUp.x - forward.x * worldUp.z,
+    z: forward.x * worldUp.y - forward.y * worldUp.x
+  };
+  const rightLen = Math.sqrt(right.x**2 + right.y**2 + right.z**2);
+  right.x /= rightLen; right.y /= rightLen; right.z /= rightLen;
+  
+  // Up vector (cross product of right and forward)
+  const up = {
+    x: right.y * forward.z - right.z * forward.y,
+    y: right.z * forward.x - right.x * forward.z,
+    z: right.x * forward.y - right.y * forward.x
+  };
+  
+  // Project onto camera plane
+  const screenX = dx * right.x + dy * right.y + dz * right.z;
+  const screenY = dx * up.x + dy * up.y + dz * up.z;
+  const depth = dx * forward.x + dy * forward.y + dz * forward.z;
+  
+  // Perspective division and screen mapping
+  const scale = 600 / cam.distance; // Perspective scale
+  const cx = el.canvas.width / 2;
+  const cy = el.canvas.height / 2;
+  
+  return {
+    x: cx + screenX * scale,
+    y: cy - screenY * scale,
+    depth: depth
+  };
+}
+
+function fitView3D(nodes){
+  if(!nodes || nodes.length===0) return;
+  let minX=Infinity, minY=Infinity, minZ=Infinity;
+  let maxX=-Infinity, maxY=-Infinity, maxZ=-Infinity;
+  for(const n of nodes){
+    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    minZ = Math.min(minZ, n.z); maxZ = Math.max(maxZ, n.z);
+  }
+  const cx = (minX+maxX)/2, cy = (minY+maxY)/2, cz = (minZ+maxZ)/2;
+  const span = Math.max(maxX-minX, maxY-minY, maxZ-minZ, 50);
+  
+  View.cam.centerX = cx;
+  View.cam.centerY = cy;
+  View.cam.centerZ = cz;
+  View.cam.distance = span * 2.5;
+}
+
+/* =========================
+   Drawing
+   ========================= */
+function clearCanvas(){
+  ctx.clearRect(0,0,el.canvas.width,el.canvas.height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0,0,el.canvas.width,el.canvas.height);
+}
+
+function drawGrid3D(){
+  const gridSize = 200;
+  const gridStep = 20;
+  
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,0,0,0.08)";
+  ctx.lineWidth = 0.5;
+  
+  // Draw XY grid at z=0
+  for(let x = -gridSize; x <= gridSize; x += gridStep){
+    const p1 = project3D(x, -gridSize, 0);
+    const p2 = project3D(x, gridSize, 0);
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  }
+  for(let y = -gridSize; y <= gridSize; y += gridStep){
+    const p1 = project3D(-gridSize, y, 0);
+    const p2 = project3D(gridSize, y, 0);
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  }
+  
+  // Draw axes
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(220,38,38,0.5)"; // X axis
+  let p1 = project3D(0,0,0);
+  let p2 = project3D(50,0,0);
+  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  
+  ctx.strokeStyle = "rgba(34,197,94,0.5)"; // Y axis
+  p2 = project3D(0,50,0);
+  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  
+  ctx.strokeStyle = "rgba(59,130,246,0.5)"; // Z axis
+  p2 = project3D(0,0,50);
+  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  
+  ctx.restore();
+}
+
+function draw3DArrow(x, y, z, fx, fy, fz, color="#dc2626"){
+  // Draw a 3D arrow for a load vector
+  const mag = Math.sqrt(fx*fx + fy*fy + fz*fz);
+  if(mag < 1e-6) return;
+  
+  // Scale arrow length based on magnitude (heuristic)
+  const maxLoad = 5000;
+  const maxLength = 40;
+  const arrowLen = Math.min(maxLength, maxLength * (mag / maxLoad));
+  
+  // Normalize direction
+  const dx = (fx / mag) * arrowLen;
+  const dy = (fy / mag) * arrowLen;
+  const dz = (fz / mag) * arrowLen;
+  
+  // Draw arrow shaft (pointing FROM the load location)
+  const p0 = project3D(x, y, z);
+  const p1 = project3D(x - dx, y - dy, z - dz);
+  
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p0.x, p0.y);
+  ctx.stroke();
+  
+  // Draw arrowhead at the node
+  const headSize = 8;
+  // Create perpendicular vectors for arrowhead in screen space
+  const sx = p0.x - p1.x;
+  const sy = p0.y - p1.y;
+  const slen = Math.sqrt(sx*sx + sy*sy);
+  if(slen > 1e-6){
+    const ux = sx / slen;
+    const uy = sy / slen;
+    const nx = -uy;
+    const ny = ux;
+    
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p0.x - headSize*ux + headSize*0.4*nx, p0.y - headSize*uy + headSize*0.4*ny);
+    ctx.lineTo(p0.x - headSize*ux - headSize*0.4*nx, p0.y - headSize*uy - headSize*0.4*ny);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBCSymbol(x, y, z, bc){
+  // Draw boundary condition symbol at node
+  const p = project3D(x, y, z);
+  const hasTransBC = bc.ux.prescribed || bc.uy.prescribed || bc.uz.prescribed;
+  const hasRotBC = bc.rx.prescribed || bc.ry.prescribed || bc.rz.prescribed;
+  
+  if(!hasTransBC && !hasRotBC) return; // Free node, no symbol
+  
+  ctx.save();
+  
+  // Draw triangle symbol for fixed translations
+  if(hasTransBC){
+    const size = 10;
+    ctx.fillStyle = "rgba(59,130,246,0.7)";
+    ctx.strokeStyle = "rgba(37,99,235,0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - size);
+    ctx.lineTo(p.x - size*0.866, p.y + size*0.5);
+    ctx.lineTo(p.x + size*0.866, p.y + size*0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  
+  // Draw small square for rotation BCs
+  if(hasRotBC){
+    const size = 6;
+    ctx.fillStyle = "rgba(168,85,247,0.7)";
+    ctx.strokeStyle = "rgba(147,51,234,0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.rect(p.x - size/2, p.y - size/2, size, size);
+    ctx.fill();
+    ctx.stroke();
+  }
+  
+  ctx.restore();
+}
+/* =========================
+   Local/Global Axis Visualization (Option A)
+   ========================= */
+
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+function norm3(v){
+  const L = Math.hypot(v.x, v.y, v.z);
+  if(L < 1e-14) return {x:0,y:0,z:0, L:0};
+  return {x:v.x/L, y:v.y/L, z:v.z/L, L};
+}
+
+function sub3(a,b){ return {x:a.x-b.x, y:a.y-b.y, z:a.z-b.z}; }
+function add3(a,b){ return {x:a.x+b.x, y:a.y+b.y, z:a.z+b.z}; }
+function mul3(a,s){ return {x:a.x*s, y:a.y*s, z:a.z*s}; }
+function dot3(a,b){ return a.x*b.x + a.y*b.y + a.z*b.z; }
+function cross3(a,b){
+  return {
+    x: a.y*b.z - a.z*b.y,
+    y: a.z*b.x - a.x*b.z,
+    z: a.x*b.y - a.y*b.x
+  };
+}
+
+function drawArrow2D(p0, p1, color="rgba(0,0,0,0.85)", width=2, headLen=9, headWid=5){
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const L = Math.hypot(dx, dy);
+  if(L < 1e-6) return;
+
+  const ux = dx / L, uy = dy / L;
+  const nx = -uy, ny = ux;
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle   = color;
+  ctx.lineWidth   = width;
+
+  // shaft
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.stroke();
+
+  // head
+  const bx = p1.x - headLen*ux;
+  const by = p1.y - headLen*uy;
+
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(bx + headWid*nx, by + headWid*ny);
+  ctx.lineTo(bx - headWid*nx, by - headWid*ny);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawLabel2D(p, text, color="rgba(0,0,0,0.85)"){
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "11px ui-sans-serif, system-ui, Segoe UI, Roboto, Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, p.x + 4, p.y);
+  ctx.restore();
+}
+
+/**
+ * Compute local unit axes for an element end definition:
+ *  x̂ along member
+ *  ẑ from orientation point projected normal to x̂
+ *  ŷ = ẑ × x̂
+ * Returns {xhat,yhat,zhat, ok, warn}
+ */
+function localAxesFromElem(n1, n2, e){
+  const p1 = {x:n1.x, y:n1.y, z:n1.z};
+  const p2 = {x:n2.x, y:n2.y, z:n2.z};
+
+  const ex = sub3(p2, p1);
+  const xN = norm3(ex);
+  if(xN.L < 1e-10) return {ok:false, warn:"Zero-length element", xhat:null,yhat:null,zhat:null};
+
+  const xhat = {x:xN.x, y:xN.y, z:xN.z};
+
+  // orientation point in global
+  const p3 = {x:e.x3, y:e.y3, z:e.z3};
+
+  // v = p3 - p1, project out x component
+  const v  = sub3(p3, p1);
+  const vpar = mul3(xhat, dot3(v, xhat));
+  const vperp = sub3(v, vpar);
+  const zN = norm3(vperp);
+
+  // If nearly collinear, local y/z are unstable
+  const colTol = 1e-8 * (xN.L + 1); // scale-ish
+  if(zN.L < colTol){
+    return {ok:false, warn:"Orientation point nearly collinear with element axis (local y/z unstable).", xhat, yhat:null, zhat:null};
+  }
+
+  let zhat = {x:zN.x, y:zN.y, z:zN.z};
+
+  // y = z × x (right-handed)
+  let yhat = cross3(zhat, xhat);
+  const yN = norm3(yhat);
+  if(yN.L < 1e-12){
+    return {ok:false, warn:"Local y axis degenerate (check orientation point).", xhat, yhat:null, zhat};
+  }
+  yhat = {x:yN.x, y:yN.y, z:yN.z};
+
+  // Re-orthonormalize z = x × y (reduces numerical drift)
+  zhat = cross3(xhat, yhat);
+  const zN2 = norm3(zhat);
+  zhat = {x:zN2.x, y:zN2.y, z:zN2.z};
+
+  return {ok:true, warn:null, xhat, yhat, zhat};
+}
+
+function drawLocalAxesForSelectedElem(){
+  // Show pinned element if present, else hovered element
+  const elemId = (View.pinnedElem != null) ? View.pinnedElem : View.hoveredElem;
+  if(elemId == null) return;
+
+  const e = Model.elemById.get(elemId);
+  if(!e) return;
+
+  const n1 = Model.nodeById.get(e.ni);
+  const n2 = Model.nodeById.get(e.nj);
+  if(!n1 || !n2) return;
+
+  // midpoint
+  const mid = {x:(n1.x+n2.x)/2, y:(n1.y+n2.y)/2, z:(n1.z+n2.z)/2};
+  const L = Math.hypot(n2.x-n1.x, n2.y-n1.y, n2.z-n1.z);
+  const axisLen = clamp(0.18*L, 2.5, 12);
+
+  const basis = localAxesFromElem(n1, n2, e);
+
+  // draw line to orientation point (helpful sanity check)
+  const p3 = {x:e.x3, y:e.y3, z:e.z3};
+  const pm = project3D(mid.x, mid.y, mid.z);
+  const po = project3D(p3.x, p3.y, p3.z);
+
+  ctx.save();
+  ctx.setLineDash([4,4]);
+  ctx.strokeStyle = "rgba(107,114,128,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pm.x, pm.y);
+  ctx.lineTo(po.x, po.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // if unstable orientation, warn and just draw local x
+  if(!basis.ok){
+    // local x only
+    const xEnd = add3(mid, mul3(basis.xhat, axisLen));
+    const pX = project3D(xEnd.x, xEnd.y, xEnd.z);
+
+    drawArrow2D(pm, pX, "rgba(220,38,38,0.9)", 2.5);
+    drawLabel2D(pX, "lx", "rgba(220,38,38,0.9)");
+
+    // annotate warning on canvas near the triad
+    ctx.save();
+    ctx.fillStyle = "rgba(185,28,28,0.9)";
+    ctx.font = "11px ui-sans-serif, system-ui, Segoe UI, Roboto, Arial";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(basis.warn || "Local y/z unstable", pm.x + 10, pm.y + 10);
+    ctx.restore();
+    return;
+  }
+
+  // local endpoints
+  const xEnd = add3(mid, mul3(basis.xhat, axisLen));
+  const yEnd = add3(mid, mul3(basis.yhat, axisLen));
+  const zEnd = add3(mid, mul3(basis.zhat, axisLen));
+
+  const pX = project3D(xEnd.x, xEnd.y, xEnd.z);
+  const pY = project3D(yEnd.x, yEnd.y, yEnd.z);
+  const pZ = project3D(zEnd.x, zEnd.y, zEnd.z);
+
+  // draw triad (x=red, y=green, z=blue)
+  drawArrow2D(pm, pX, "rgba(220,38,38,0.9)", 2.5);  drawLabel2D(pX, "lx", "rgba(220,38,38,0.9)");
+  drawArrow2D(pm, pY, "rgba(34,197,94,0.9)", 2.5);  drawLabel2D(pY, "ly", "rgba(34,197,94,0.9)");
+  drawArrow2D(pm, pZ, "rgba(59,130,246,0.9)", 2.5); drawLabel2D(pZ, "lz", "rgba(59,130,246,0.9)");
+
+  // small dot at triad origin
+  ctx.save();
+  ctx.fillStyle = "rgba(17,24,39,0.75)";
+  ctx.beginPath();
+  ctx.arc(pm.x, pm.y, 3.2, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGlobalTriadOverlay(){
+  // Draw in screen corner, but oriented with current camera projection of global axes.
+  // Compute screen directions by projecting (center) and (center + axisWorldLen * axis).
+  const origin3 = {x: View.cam.centerX, y: View.cam.centerY, z: View.cam.centerZ};
+  const axisWorldLen = 10;  // world units used to derive direction
+  const pixLen = 26;        // final on-screen arrow length
+
+  const p0 = project3D(origin3.x, origin3.y, origin3.z);
+
+  function screenDirForAxis(ax){
+    const p1 = project3D(origin3.x + axisWorldLen*ax.x, origin3.y + axisWorldLen*ax.y, origin3.z + axisWorldLen*ax.z);
+    let vx = p1.x - p0.x, vy = p1.y - p0.y;
+    const L = Math.hypot(vx, vy);
+    if(L < 1e-6) return {x:0,y:0, ok:false};
+    vx /= L; vy /= L;
+    return {x:vx, y:vy, ok:true};
+  }
+
+  const sx = screenDirForAxis({x:1,y:0,z:0});
+  const sy = screenDirForAxis({x:0,y:1,z:0});
+  const sz = screenDirForAxis({x:0,y:0,z:1});
+
+  // fixed screen anchor
+  const A = {x: 46, y: 46};
+
+  // box background
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.strokeStyle = "rgba(209,213,219,0.9)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect?.(16, 16, 90, 70, 8);
+  if(ctx.roundRect) ctx.fill(), ctx.stroke();
+  else { ctx.rect(16,16,90,70); ctx.fill(); ctx.stroke(); }
+  ctx.restore();
+
+  // draw arrows
+  if(sx.ok) drawArrow2D(A, {x:A.x + pixLen*sx.x, y:A.y + pixLen*sx.y}, "rgba(220,38,38,0.9)", 2.2);
+  if(sy.ok) drawArrow2D(A, {x:A.x + pixLen*sy.x, y:A.y + pixLen*sy.y}, "rgba(34,197,94,0.9)", 2.2);
+  if(sz.ok) drawArrow2D(A, {x:A.x + pixLen*sz.x, y:A.y + pixLen*sz.y}, "rgba(59,130,246,0.9)", 2.2);
+
+  // labels
+  ctx.save();
+  ctx.fillStyle = "rgba(17,24,39,0.8)";
+  ctx.font = "11px ui-sans-serif, system-ui, Segoe UI, Roboto, Arial";
+  ctx.fillText("Global", 22, 24);
+  ctx.restore();
+
+  // axis labels near tips
+  if(sx.ok) drawLabel2D({x:A.x + pixLen*sx.x, y:A.y + pixLen*sx.y}, "X", "rgba(220,38,38,0.9)");
+  if(sy.ok) drawLabel2D({x:A.x + pixLen*sy.x, y:A.y + pixLen*sy.y}, "Y", "rgba(34,197,94,0.9)");
+  if(sz.ok) drawLabel2D({x:A.x + pixLen*sz.x, y:A.y + pixLen*sz.y}, "Z", "rgba(59,130,246,0.9)");
+
+  // origin dot
+  ctx.save();
+  ctx.fillStyle = "rgba(17,24,39,0.75)";
+  ctx.beginPath();
+  ctx.arc(A.x, A.y, 2.8, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+
+function overlayDeflectedIfAvailable(){
+  if(!Model.lastSolution) return;
+  const scale = Number(el.defScale.value);
+  if(!(scale > 0)) return;
+
+  const { expanded, U } = Model.lastSolution;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(220,38,38,0.85)";
+  ctx.lineWidth = 2.0;
+  for(const e of expanded.elems){
+    const n1 = expanded.nodes[e.ni];
+    const n2 = expanded.nodes[e.nj];
+    // Read from 6-DOF layout
+    const ux1 = U[6*e.ni+0], uy1 = U[6*e.ni+1], uz1 = U[6*e.ni+2];
+    const ux2 = U[6*e.nj+0], uy2 = U[6*e.nj+1], uz2 = U[6*e.nj+2];
+
+    const p1 = project3D(n1.x + scale*ux1, n1.y + scale*uy1, n1.z + scale*uz1);
+    const p2 = project3D(n2.x + scale*ux2, n2.y + scale*uy2, n2.z + scale*uz2);
+
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPrimary(){
+  clearCanvas();
+  drawGrid3D();
+
+  // elements
+  ctx.save();
+  for(const e of Model.elems){
+    const ni = Model.nodeById.get(e.ni);
+    const nj = Model.nodeById.get(e.nj);
+    if(!ni || !nj) continue;
+    const a = project3D(ni.x, ni.y, ni.z);
+    const b = project3D(nj.x, nj.y, nj.z);
+    
+    // Highlight if hovered or pinned
+    const isHovered = (View.hoveredElem === e.id);
+    const isPinned = (View.pinnedElem === e.id);
+    const isHighlighted = isHovered || isPinned;
+    
+    if(isPinned){
+      ctx.strokeStyle = "rgba(251,191,36,0.95)"; // Gold for pinned
+      ctx.lineWidth = 4.0;
+    } else if(isHovered){
+      ctx.strokeStyle = "rgba(59,130,246,0.9)"; // Blue for hovered
+      ctx.lineWidth = 3.5;
+    } else {
+      ctx.strokeStyle = "rgba(0,0,0,0.55)"; // Default
+      ctx.lineWidth = 2.0;
+    }
+    
+    ctx.beginPath(); 
+    ctx.moveTo(a.x, a.y); 
+    ctx.lineTo(b.x, b.y); 
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // BC symbols (draw before nodes so nodes appear on top)
+  for(const n of Model.nodes){
+    drawBCSymbol(n.x, n.y, n.z, {
+      ux: n.ux, uy: n.uy, uz: n.uz,
+      rx: n.rx, ry: n.ry, rz: n.rz
+    });
+  }
+
+  // Load arrows
+  for(const n of Model.nodes){
+    const fx = n.loads.fx || 0;
+    const fy = n.loads.fy || 0;
+    const fz = n.loads.fz || 0;
+    if(fx !== 0 || fy !== 0 || fz !== 0){
+      draw3DArrow(n.x, n.y, n.z, fx, fy, fz);
+    }
+  }
+
+  // nodes
+  for(const n of Model.nodes){
+    const p = project3D(n.x, n.y, n.z);
+    ctx.save();
+    
+    // Highlight if hovered or pinned
+    const isHovered = (View.hoveredNode === n.id);
+    const isPinned = (View.pinnedNode === n.id);
+    const isHighlighted = isHovered || isPinned;
+    const radius = isHighlighted ? 6 : 4.2;
+    
+    ctx.beginPath(); 
+    ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
+    
+    if(isPinned){
+      ctx.fillStyle = "rgba(251,191,36,0.9)"; // Gold for pinned
+    } else if(isHovered){
+      ctx.fillStyle = "rgba(59,130,246,0.9)"; // Blue for hovered
+    } else {
+      ctx.fillStyle = "rgba(37,99,235,0.65)"; // Default blue
+    }
+    ctx.fill();
+    
+    if(isHighlighted){
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  overlayDeflectedIfAvailable();
+
+  // ---- Option A: axis visualization ----
+  drawLocalAxesForSelectedElem(); // local triad for hovered/pinned segment
+  drawGlobalTriadOverlay();       // global triad in screen corner
+}
+
+
+
+/* =========================
+   Solver (TEMPORARY: Still uses 2D beam formulation - will be updated to 3D space frame)
+   ========================= */
+function buildExpandedModel(nSub = 10){
+  const expanded = { nodes: [], elems: [], mapPrimaryToExpandedIndex: new Map() };
+  const primaryNodesSorted = [...Model.nodes].slice().sort((a,b)=>a.id-b.id);
+
+  for(const pn of primaryNodesSorted){
+    const idx = expanded.nodes.length;
+    console.log(`Adding primary node ${pn.id} at expanded index ${idx}, rx.prescribed=${pn.rx.prescribed}`);
+    expanded.nodes.push({
+      x: pn.x, y: pn.y, z: pn.z,
+      label: `N${pn.id}`,
+      isPrimary: true,  // Mark as primary node
+      bc: {
+        ux: { prescribed: pn.ux.prescribed, value: pn.ux.value },
+        uy: { prescribed: pn.uy.prescribed, value: pn.uy.value },
+        uz: { prescribed: pn.uz.prescribed, value: pn.uz.value },
+        rx: { prescribed: pn.rx.prescribed, value: pn.rx.value },
+        ry: { prescribed: pn.ry.prescribed, value: pn.ry.value },
+        rz: { prescribed: pn.rz.prescribed, value: pn.rz.value }
+      },
+      loads: { fx: pn.loads.fx, fy: pn.loads.fy, fz: pn.loads.fz }
+    });
+    expanded.mapPrimaryToExpandedIndex.set(pn.id, idx);
+  }
+
+  for(const pe of Model.elems){
+    const nI = Model.nodeById.get(pe.ni);
+    const nJ = Model.nodeById.get(pe.nj);
+    if(!nI || !nJ) continue;
+
+    const iExp = expanded.mapPrimaryToExpandedIndex.get(pe.ni);
+    const jExp = expanded.mapPrimaryToExpandedIndex.get(pe.nj);
+
+    const internalIdx = [];
+    for(let k=1;k<nSub;k++){
+      const t = k / nSub;
+      const idx = expanded.nodes.length;
+      expanded.nodes.push({
+        x: nI.x + t*(nJ.x - nI.x),
+        y: nI.y + t*(nJ.y - nI.y),
+        z: nI.z + t*(nJ.z - nI.z),
+        label: `S${pe.id}.${k}`,
+        isPrimary: false,  // Mark as internal subsegment node
+        bc: { 
+          ux:{prescribed:false,value:0}, uy:{prescribed:false,value:0}, uz:{prescribed:false,value:0},
+          rx:{prescribed:false,value:0}, ry:{prescribed:false,value:0}, rz:{prescribed:false,value:0}
+        },
+        loads: { fx:0, fy:0, fz:0 }
+      });
+      internalIdx.push(idx);
+    }
+
+    const chain = [iExp, ...internalIdx, jExp];
+    for(let s=0; s<nSub; s++){
+expanded.elems.push({
+  ni: chain[s], nj: chain[s+1],
+  E: pe.E, G: pe.G, Izz: pe.Izz, Iyy: pe.Iyy, Jyz: pe.Jyz, Ayz: pe.Ayz,
+  rho: pe.rho,                 // ✅ ADD THIS
+  x3: pe.x3, y3: pe.y3, z3: pe.z3,
+  primaryElemId: pe.id,
+  subIndex: s+1
 });
+
+    }
+  }
+  return expanded;
+}
+
+function solveLinearSystemDense(A, b){
+  const n = b.length;
+  const M = Array.from({length:n}, (_,i)=> Float64Array.from(A[i]));
+  const rhs = new Float64Array(b);
+
+  for(let k=0;k<n;k++){
+    let piv = k;
+    let max = Math.abs(M[k][k]);
+    for(let i=k+1;i<n;i++){
+      const v = Math.abs(M[i][k]);
+      if(v>max){ max=v; piv=i; }
+    }
+    if(max === 0 || !Number.isFinite(max)){
+      console.error(`Singular matrix at DOF ${k}, max pivot = ${max}`);
+      console.error(`This corresponds to: Node ${Math.floor(k/6)}, DOF ${k%6} (0=ux,1=uy,2=uz,3=rx,4=ry,5=rz)`);
+      throw new Error("Singular or ill-conditioned stiffness matrix (pivot=0).");
+    }
+
+    if(piv !== k){
+      const tmpRow = M[k]; M[k] = M[piv]; M[piv] = tmpRow;
+      const tmpB = rhs[k]; rhs[k] = rhs[piv]; rhs[piv] = tmpB;
+    }
+
+    const akk = M[k][k];
+    for(let i=k+1;i<n;i++){
+      const factor = M[i][k] / akk;
+      if(factor === 0) continue;
+      rhs[i] -= factor * rhs[k];
+      const Mi = M[i], Mk = M[k];
+      for(let j=k;j<n;j++) Mi[j] -= factor * Mk[j];
+    }
+  }
+
+  const sol = new Float64Array(n);
+  for(let i=n-1;i>=0;i--){
+    let sum = rhs[i];
+    const Mi = M[i];
+    for(let j=i+1;j<n;j++) sum -= Mi[j] * sol[j];
+    sol[i] = sum / Mi[i];
+  }
+  return sol;
+}
+
+function elementLocalStiffness3D(E, G, Ayz, Izz, Iyy, Jyz, L){
+  // 3D space frame element stiffness in local coordinates
+  // 12 DOF: node i (ux, uy, uz, rx, ry, rz), node j (ux, uy, uz, rx, ry, rz)
+  // Local axis: x = along element, y and z are perpendicular
+  
+  const EA_L = (E * Ayz) / L;
+  const GJ_L = (G * Jyz) / L;
+  
+  // Bending about local z-axis (EIyy)
+  const EIyy = E * Iyy;
+  const EIyy_L3 = EIyy / (L*L*L);
+  const EIyy_L2 = EIyy / (L*L);
+  const EIyy_L = EIyy / L;
+  
+  // Bending about local y-axis (EIzz)
+  const EIzz = E * Izz;
+  const EIzz_L3 = EIzz / (L*L*L);
+  const EIzz_L2 = EIzz / (L*L);
+  const EIzz_L = EIzz / L;
+  
+  // Initialize 12x12 matrix
+  const k = Array.from({length: 12}, () => new Float64Array(12));
+  
+  // Axial stiffness (DOF 0, 6)
+  k[0][0] = EA_L;    k[0][6] = -EA_L;
+  k[6][0] = -EA_L;   k[6][6] = EA_L;
+  
+  // Torsion (DOF 3, 9)
+  k[3][3] = GJ_L;    k[3][9] = -GJ_L;
+  k[9][3] = -GJ_L;   k[9][9] = GJ_L;
+  
+  // Bending in local x-y plane (y displacement, z rotation) - DOF 1, 5, 7, 11
+  k[1][1] = 12*EIzz_L3;   k[1][5] = 6*EIzz_L2;    k[1][7] = -12*EIzz_L3;  k[1][11] = 6*EIzz_L2;
+  k[5][1] = 6*EIzz_L2;    k[5][5] = 4*EIzz_L;     k[5][7] = -6*EIzz_L2;   k[5][11] = 2*EIzz_L;
+  k[7][1] = -12*EIzz_L3;  k[7][5] = -6*EIzz_L2;   k[7][7] = 12*EIzz_L3;   k[7][11] = -6*EIzz_L2;
+  k[11][1] = 6*EIzz_L2;   k[11][5] = 2*EIzz_L;    k[11][7] = -6*EIzz_L2;  k[11][11] = 4*EIzz_L;
+  
+  // Bending in local x-z plane (z displacement, y rotation) - DOF 2, 4, 8, 10
+  k[2][2] = 12*EIyy_L3;   k[2][4] = -6*EIyy_L2;   k[2][8] = -12*EIyy_L3;  k[2][10] = -6*EIyy_L2;
+  k[4][2] = -6*EIyy_L2;   k[4][4] = 4*EIyy_L;     k[4][8] = 6*EIyy_L2;    k[4][10] = 2*EIyy_L;
+  k[8][2] = -12*EIyy_L3;  k[8][4] = 6*EIyy_L2;    k[8][8] = 12*EIyy_L3;   k[8][10] = 6*EIyy_L2;
+  k[10][2] = -6*EIyy_L2;  k[10][4] = 2*EIyy_L;    k[10][8] = 6*EIyy_L2;   k[10][10] = 4*EIyy_L;
+  
+  return k;
+}
+
+function applyMomentReleases(kLocal, release_i, release_j, E, Izz, Iyy, L){
+  // Apply moment releases for pinned connections
+  // release_i/j: {rx, ry, rz} - true if that rotation is FREE (pinned)
+  
+  // Make a copy to modify
+  const k = Array.from({length: 12}, (_, i) => Float64Array.from(kLocal[i]));
+  
+  const EIyy = E * Iyy;
+  const EIyy_L3 = EIyy / (L*L*L);
+  const EIyy_L2 = EIyy / (L*L);
+  const EIyy_L = EIyy / L;
+  
+  const EIzz = E * Izz;
+  const EIzz_L3 = EIzz / (L*L*L);
+  const EIzz_L2 = EIzz / (L*L);
+  const EIzz_L = EIzz / L;
+  
+  // Release Mx (torsion) at node i (DOF 3)
+  if(release_i.rx){
+    // Zero out row and column for DOF 3
+    for(let j = 0; j < 12; j++){
+      k[3][j] = 0;
+      k[j][3] = 0;
+    }
+  }
+  
+  // Release Mx (torsion) at node j (DOF 9)
+  if(release_j.rx){
+    for(let j = 0; j < 12; j++){
+      k[9][j] = 0;
+      k[j][9] = 0;
+    }
+  }
+  
+  // Release My (bending about y-axis) at node i (DOF 4)
+  if(release_i.ry){
+    // For pin at i-end: beam becomes cantilever from j
+    // Modify bending in x-z plane (DOF 2, 4, 8, 10)
+    k[2][2] = 3*EIyy_L3;   k[2][4] = 0;            k[2][8] = -3*EIyy_L3;  k[2][10] = 3*EIyy_L2;
+    k[4][2] = 0;           k[4][4] = 0;            k[4][8] = 0;           k[4][10] = 0;
+    k[8][2] = -3*EIyy_L3;  k[8][4] = 0;            k[8][8] = 3*EIyy_L3;   k[8][10] = -3*EIyy_L2;
+    k[10][2] = 3*EIyy_L2;  k[10][4] = 0;           k[10][8] = -3*EIyy_L2; k[10][10] = 3*EIyy_L;
+  }
+  
+  // Release My (bending about y-axis) at node j (DOF 10)
+  if(release_j.ry){
+    // For pin at j-end: beam becomes cantilever from i
+    k[2][2] = 3*EIyy_L3;   k[2][4] = -3*EIyy_L2;   k[2][8] = -3*EIyy_L3;  k[2][10] = 0;
+    k[4][2] = -3*EIyy_L2;  k[4][4] = 3*EIyy_L;     k[4][8] = 3*EIyy_L2;   k[4][10] = 0;
+    k[8][2] = -3*EIyy_L3;  k[8][4] = 3*EIyy_L2;    k[8][8] = 3*EIyy_L3;   k[8][10] = 0;
+    k[10][2] = 0;          k[10][4] = 0;           k[10][8] = 0;          k[10][10] = 0;
+  }
+  
+  // Release Mz (bending about z-axis) at node i (DOF 5)
+  if(release_i.rz){
+    // For pin at i-end: modify bending in x-y plane (DOF 1, 5, 7, 11)
+    k[1][1] = 3*EIzz_L3;   k[1][5] = 0;            k[1][7] = -3*EIzz_L3;  k[1][11] = 3*EIzz_L2;
+    k[5][1] = 0;           k[5][5] = 0;            k[5][7] = 0;           k[5][11] = 0;
+    k[7][1] = -3*EIzz_L3;  k[7][5] = 0;            k[7][7] = 3*EIzz_L3;   k[7][11] = -3*EIzz_L2;
+    k[11][1] = 3*EIzz_L2;  k[11][5] = 0;           k[11][7] = -3*EIzz_L2; k[11][11] = 3*EIzz_L;
+  }
+  
+  // Release Mz (bending about z-axis) at node j (DOF 11)
+  if(release_j.rz){
+    // For pin at j-end
+    k[1][1] = 3*EIzz_L3;   k[1][5] = -3*EIzz_L2;   k[1][7] = -3*EIzz_L3;  k[1][11] = 0;
+    k[5][1] = -3*EIzz_L2;  k[5][5] = 3*EIzz_L;     k[5][7] = 3*EIzz_L2;   k[5][11] = 0;
+    k[7][1] = -3*EIzz_L3;  k[7][5] = 3*EIzz_L2;    k[7][7] = 3*EIzz_L3;   k[7][11] = 0;
+    k[11][1] = 0;          k[11][5] = 0;           k[11][7] = 0;          k[11][11] = 0;
+  }
+  
+  // Handle both ends pinned cases
+  if(release_i.ry && release_j.ry){
+    // Both ends pinned in My: simply supported beam in x-z plane
+    // Use 12EI/L^3 for deflection coupling, but zero moment terms
+    k[2][2] = 12*EIyy_L3;   k[2][4] = 0;   k[2][8] = -12*EIyy_L3;  k[2][10] = 0;
+    k[4][2] = 0;            k[4][4] = 0;   k[4][8] = 0;            k[4][10] = 0;
+    k[8][2] = -12*EIyy_L3;  k[8][4] = 0;   k[8][8] = 12*EIyy_L3;   k[8][10] = 0;
+    k[10][2] = 0;           k[10][4] = 0;  k[10][8] = 0;           k[10][10] = 0;
+  }
+  
+  if(release_i.rz && release_j.rz){
+    // Both ends pinned in Mz: simply supported beam in x-y plane
+    k[1][1] = 12*EIzz_L3;   k[1][5] = 0;   k[1][7] = -12*EIzz_L3;  k[1][11] = 0;
+    k[5][1] = 0;            k[5][5] = 0;   k[5][7] = 0;            k[5][11] = 0;
+    k[7][1] = -12*EIzz_L3;  k[7][5] = 0;   k[7][7] = 12*EIzz_L3;   k[7][11] = 0;
+    k[11][1] = 0;           k[11][5] = 0;  k[11][7] = 0;           k[11][11] = 0;
+  }
+  
+  return k;
+}
+
+function build3DTransformationMatrix(ni, nj, x3, y3, z3){
+  // Build 12x12 transformation matrix from local to global coordinates
+  // Local x-axis: from ni to nj
+  // Local y and z axes: defined by orientation point (x3, y3, z3)
+  
+  const dx = nj.x - ni.x;
+  const dy = nj.y - ni.y;
+  const dz = nj.z - ni.z;
+  const L = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  
+  if(L < 1e-10) throw new Error("Zero-length element");
+  
+  // Local x-axis (unit vector along element)
+  const xx = dx / L;
+  const xy = dy / L;
+  const xz = dz / L;
+  
+  // Vector from node i to orientation point
+  const vx = x3 - ni.x;
+  const vy = y3 - ni.y;
+  const vz = z3 - ni.z;
+  
+  // Project v onto local x-axis
+  const dot = vx*xx + vy*xy + vz*xz;
+  
+  // Component of v perpendicular to x-axis (in x-z local plane)
+  const vzx = vx - dot*xx;
+  const vzy = vy - dot*xy;
+  const vzz = vz - dot*xz;
+  
+  const vzLen = Math.sqrt(vzx*vzx + vzy*vzy + vzz*vzz);
+  
+  if(vzLen < 1e-10) throw new Error("Orientation point is collinear with element axis");
+  
+  // Local z-axis (unit vector)
+  const zx = vzx / vzLen;
+  const zy = vzy / vzLen;
+  const zz = vzz / vzLen;
+  
+  // Local y-axis: y = z × x (cross product)
+  const yx = zy*xz - zz*xy;
+  const yy = zz*xx - zx*xz;
+  const yz = zx*xy - zy*xx;
+  
+  // Build 3x3 rotation matrix
+  const R = [
+    [xx, xy, xz],
+    [yx, yy, yz],
+    [zx, zy, zz]
+  ];
+  
+  // Build 12x12 transformation matrix (block diagonal)
+  const T = Array.from({length: 12}, () => new Float64Array(12));
+  
+  for(let block = 0; block < 4; block++){
+    const offset = block * 3;
+    for(let i = 0; i < 3; i++){
+      for(let j = 0; j < 3; j++){
+        T[offset + i][offset + j] = R[i][j];
+      }
+    }
+  }
+  
+  return T;
+}
+
+function buildBcByDof(expanded){
+  const N = expanded.nodes.length;
+  const ndof = 6*N;
+  const bcByDof = Array(ndof).fill(null);
+
+  for(let i=0;i<N;i++){
+    const bc = expanded.nodes[i].bc;
+    const base = 6*i;
+
+    if(bc.ux.prescribed) bcByDof[base+0] = bc.ux.value;
+    if(bc.uy.prescribed) bcByDof[base+1] = bc.uy.value;
+    if(bc.uz.prescribed) bcByDof[base+2] = bc.uz.value;
+
+    if(bc.rx.prescribed) bcByDof[base+3] = bc.rx.value;
+    if(bc.ry.prescribed) bcByDof[base+4] = bc.ry.value;
+    if(bc.rz.prescribed) bcByDof[base+5] = bc.rz.value;
+  }
+  return bcByDof;
+}
+
+function solveWithPrescribed(K, F, bcByDof){
+  const ndof = F.length;
+  const free = [];
+  const fixed = [];
+  const uFixed = [];
+
+  for(let i=0;i<ndof;i++){
+    const v = bcByDof[i];
+    if(v === null || v === undefined) free.push(i);
+    else { fixed.push(i); uFixed.push(v); }
+  }
+  if(free.length === 0) throw new Error("All DOFs are prescribed; nothing to solve.");
+
+  // rhs = Ff - Kfc * uc
+  const rhs = new Float64Array(free.length);
+  for(let a=0;a<free.length;a++){
+    const I = free[a];
+    let val = F[I];
+    const Ki = K[I];
+    for(let b=0;b<fixed.length;b++){
+      const J = fixed[b];
+      val -= Ki[J] * uFixed[b];
+    }
+    rhs[a] = val;
+  }
+
+  // Kff
+  const Kff = Array.from({length: free.length}, ()=> new Float64Array(free.length));
+  for(let a=0;a<free.length;a++){
+    const I = free[a];
+    const Ki = K[I];
+    const row = Kff[a];
+    for(let b=0;b<free.length;b++){
+      row[b] = Ki[free[b]];
+    }
+  }
+
+  const uf = solveLinearSystemDense(Kff, rhs);
+
+  const U = new Float64Array(ndof);
+  for(let b=0;b<fixed.length;b++) U[fixed[b]] = uFixed[b];
+  for(let a=0;a<free.length;a++) U[free[a]] = uf[a];
+
+  return {U, free, fixed};
+}
+
+function computeReactions(K, U, F){
+  const ndof = F.length;
+  const R = new Float64Array(ndof);
+  for(let i=0;i<ndof;i++){
+    let sum = 0;
+    const Ki = K[i];
+    for(let j=0;j<ndof;j++) sum += Ki[j]*U[j];
+    R[i] = sum - F[i];
+  }
+  return R;
+}
+
+
+function solveStaticExpanded(expanded){
+  // Full 3D space frame solver with 6 DOF per node
+  // BC semantics:
+  //   - blank => free DOF
+  //   - nonblank (including 0.0) => prescribed DOF (condensed out)
+  //
+  // Adds SELF-WEIGHT as uniform distributed line load on each element:
+  //   w = rho * A * g  (rho = mass density)
+  // Gravity assumed global -Z.
+  //
+  // IMPORTANT TRANSFORM CONVENTIONS (consistent with your corrected uL = T*uG):
+  //   uL = T * uG        (T maps GLOBAL displacements -> LOCAL)
+  //   Kglobal = T^T kL T
+  //   fG = T^T fL        (force vector transforms with transpose)
+
+  const N = expanded.nodes.length;
+  const ndof = 6*N;
+
+  const K = Array.from({length: ndof}, ()=> new Float64Array(ndof));
+  const F = new Float64Array(ndof);
+
+  // Apply nodal FORCE loads (global)
+  for(let i=0;i<N;i++){
+    const n = expanded.nodes[i];
+    F[6*i+0] += (n.loads.fx || 0);
+    F[6*i+1] += (n.loads.fy || 0);
+    F[6*i+2] += (n.loads.fz || 0);
+    // No user-entered nodal moments by design
+  }
+
+  // Assemble global stiffness matrix AND add equivalent nodal loads from self-weight
+  for(const e of expanded.elems){
+    const n1 = expanded.nodes[e.ni];
+    const n2 = expanded.nodes[e.nj];
+    const dx = n2.x-n1.x, dy = n2.y-n1.y, dz = n2.z-n1.z;
+    const L = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if(!(L>0)) throw new Error("Zero-length element detected in expanded mesh.");
+
+    // DOF map for this element (global indices)
+    const dofs = [
+      6*e.ni+0, 6*e.ni+1, 6*e.ni+2, 6*e.ni+3, 6*e.ni+4, 6*e.ni+5,
+      6*e.nj+0, 6*e.nj+1, 6*e.nj+2, 6*e.nj+3, 6*e.nj+4, 6*e.nj+5
+    ];
+
+    // Local stiffness (12x12)
+    const kLocal = elementLocalStiffness3D(e.E, e.G, e.Ayz, e.Izz, e.Iyy, e.Jyz, L);
+
+    // Transformation matrix (GLOBAL -> LOCAL for displacements)
+    const T = build3DTransformationMatrix(n1, n2, e.x3, e.y3, e.z3);
+
+    // Transform stiffness: kg = T^T * kLocal * T
+    const tmp = Array.from({length:12}, ()=> new Float64Array(12));
+    for(let i=0;i<12;i++){
+      for(let j=0;j<12;j++){
+        let sum = 0;
+        for(let m=0;m<12;m++) sum += kLocal[i][m] * T[m][j];
+        tmp[i][j] = sum;
+      }
+    }
+
+    const kg = Array.from({length:12}, ()=> new Float64Array(12));
+    for(let i=0;i<12;i++){
+      for(let j=0;j<12;j++){
+        let sum = 0;
+        for(let m=0;m<12;m++) sum += T[m][i] * tmp[m][j]; // T^T on left
+        kg[i][j] = sum;
+      }
+    }
+
+    // Assemble stiffness into global K
+    for(let a=0;a<12;a++){
+      const Irow = dofs[a];
+      const Krow = K[Irow];
+      const kga = kg[a];
+      for(let b=0;b<12;b++) Krow[dofs[b]] += kga[b];
+    }
+
+    // ============================
+    // SELF-WEIGHT (uniform line load)
+    // ============================
+    // rho is stored on element as MASS density (imperial: slug/in^3, metric: kg/m^3)
+    const rho = (e.rho || 0);
+    if(rho !== 0){
+      const g = getGravity();              // expects your UNIT_SYSTEM logic
+      const w = rho * e.Ayz * g;           // force/length
+      if(Math.abs(w) > 0){
+        // Global distributed load vector (force/length): gravity in -Z
+        const wg = {x:0, y:0, z:-w};
+
+        // Extract 3x3 R from T (same entries; T block0 is R)
+        // Since uL = R * uG, global->local for vectors is vL = R * vG
+        const R = [
+          [T[0][0], T[0][1], T[0][2]],
+          [T[1][0], T[1][1], T[1][2]],
+          [T[2][0], T[2][1], T[2][2]]
+        ];
+
+        // Local components of distributed load: wL = R * wG
+        const wLx = R[0][0]*wg.x + R[0][1]*wg.y + R[0][2]*wg.z;
+        const wLy = R[1][0]*wg.x + R[1][1]*wg.y + R[1][2]*wg.z;
+        const wLz = R[2][0]*wg.x + R[2][1]*wg.y + R[2][2]*wg.z;
+
+        // Build local equivalent nodal load vector feL (12)
+        // Order: [Fx,Fy,Fz,Mx,My,Mz, Fx2,Fy2,Fz2,Mx2,My2,Mz2]
+        const feL = new Float64Array(12);
+
+        // (Optional) axial distributed load component along local x
+        // Uniform axial load: Fx_i = wx*L/2, Fx_j = wx*L/2
+        // (No moments from axial)
+        feL[0] += wLx * L/2;
+        feL[6] += wLx * L/2;
+
+        // Uniform load in local y -> end shears Fy and end moments Mz
+        feL[1]  += wLy * L/2;
+        feL[5]  +=  wLy * L*L/12;
+        feL[7]  += wLy * L/2;
+        feL[11] += -wLy * L*L/12;
+
+        // Uniform load in local z -> end shears Fz and end moments My
+        feL[2]  += wLz * L/2;
+        feL[4]  += -wLz * L*L/12;
+        feL[8]  += wLz * L/2;
+        feL[10] +=  wLz * L*L/12;
+
+        // Transform equivalent nodal loads to global: feG = T^T * feL
+        const feG = new Float64Array(12);
+        for(let i=0;i<12;i++){
+          let s = 0;
+          for(let j=0;j<12;j++) s += T[j][i] * feL[j]; // T^T
+          feG[i] = s;
+        }
+
+        // Assemble into global RHS
+        for(let a=0;a<12;a++) F[dofs[a]] += feG[a];
+      }
+    }
+  }
+
+  // Condense prescribed DOFs
+  const bcByDof = buildBcByDof(expanded);
+  const {U, free, fixed} = solveWithPrescribed(K, F, bcByDof);
+
+  // Reactions
+  const R = computeReactions(K, U, F);
+
+  return { U, F, K, R, meta:{N, ndof, nFree: free.length, nFixed: fixed.length, free, fixed} };
+}
+
+function summarizeDisplacements(expanded, U){
+  let maxMag = { val:-Infinity, label:"" };
+  let minMag = { val:+Infinity, label:"" };
+  for(let i=0;i<expanded.nodes.length;i++){
+    // Read from 6-DOF layout
+    const ux = U[6*i+0], uy = U[6*i+1], uz = U[6*i+2];
+    const mag = Math.hypot(ux, uy, uz);
+    const lab = expanded.nodes[i].label || `idx${i}`;
+    if(mag > maxMag.val) maxMag = { val:mag, label:lab };
+    if(mag < minMag.val) minMag = { val:mag, label:lab };
+  }
+  return { maxMag, minMag };
+}
+
+function elementEndForcesLocal(expanded, e, U){
+  const n1 = expanded.nodes[e.ni];
+  const n2 = expanded.nodes[e.nj];
+  const dx = n2.x-n1.x, dy = n2.y-n1.y, dz = n2.z-n1.z;
+  const L  = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  if(!(L > 0)) throw new Error("Zero-length element in elementEndForcesLocal().");
+
+  // Global element displacement vector (12)
+  const uG = new Float64Array(12);
+  for(let i=0; i<6; i++){
+    uG[i]   = U[6*e.ni + i];
+    uG[i+6] = U[6*e.nj + i];
+  }
+
+  // Transformation matrix (GLOBAL -> LOCAL for displacements)
+  const T = build3DTransformationMatrix(n1, n2, e.x3, e.y3, e.z3);
+
+  // ✅ Correct: uL = T * uG   (NOT T^T * uG)
+  const uL = new Float64Array(12);
+  for(let i=0; i<12; i++){
+    let sum = 0;
+    for(let j=0; j<12; j++) sum += T[i][j] * uG[j];
+    uL[i] = sum;
+  }
+
+  // Local end forces from stiffness
+  const kL = elementLocalStiffness3D(e.E, e.G, e.Ayz, e.Izz, e.Iyy, e.Jyz, L);
+  const fL = new Float64Array(12);
+  for(let i=0; i<12; i++){
+    let sum = 0;
+    for(let j=0; j<12; j++) sum += kL[i][j] * uL[j];
+    fL[i] = sum;
+  }
+
+  // =========================================================
+  // SUBTRACT FIXED-END VECTOR for SELF-WEIGHT (UDL)
+  // So recovered end actions correspond to internal end forces:
+  //   f_internal = k*u - f_fixedEnd
+  // This must match the same UDL assumptions used in assembly.
+  //
+  // Here:
+  //   w = rho * A * g  (force/length magnitude)
+  //   gravity acts in GLOBAL -Z
+  //   vectors transform GLOBAL->LOCAL as vL = R * vG (R from T block 0)
+  // =========================================================
+  const rho = (e.rho || 0);
+  if(rho !== 0){
+    const g = getGravity();
+    const w = rho * e.Ayz * g;         // force/length magnitude
+    if(Math.abs(w) > 0){
+      const wg = {x:0, y:0, z:-w};     // global gravity direction
+
+      // R is the 3x3 in block 0 of T; since uL = R*uG, vectors use same mapping
+      const R = [
+        [T[0][0], T[0][1], T[0][2]],
+        [T[1][0], T[1][1], T[1][2]],
+        [T[2][0], T[2][1], T[2][2]]
+      ];
+
+      // Local components of distributed load
+      const wLx = R[0][0]*wg.x + R[0][1]*wg.y + R[0][2]*wg.z;
+      const wLy = R[1][0]*wg.x + R[1][1]*wg.y + R[1][2]*wg.z;
+      const wLz = R[2][0]*wg.x + R[2][1]*wg.y + R[2][2]*wg.z;
+
+      // Equivalent nodal load vector in LOCAL coordinates (12)
+      // Order: [Fx,Fy,Fz,Mx,My,Mz, Fx2,Fy2,Fz2,Mx2,My2,Mz2]
+      const feL = new Float64Array(12);
+
+      // Uniform axial along local x
+      feL[0] += wLx * L/2;
+      feL[6] += wLx * L/2;
+
+      // Uniform load in local y -> end shears Fy and end moments Mz
+      feL[1]  += wLy * L/2;
+      feL[5]  +=  wLy * L*L/12;
+      feL[7]  += wLy * L/2;
+      feL[11] += -wLy * L*L/12;
+
+      // Uniform load in local z -> end shears Fz and end moments My
+      feL[2]  += wLz * L/2;
+      feL[4]  += -wLz * L*L/12;
+      feL[8]  += wLz * L/2;
+      feL[10] +=  wLz * L*L/12;
+
+      // Subtract fixed-end vector
+      for(let i=0;i<12;i++) fL[i] -= feL[i];
+    }
+  }
+
+  return { fL, L };
+}
+
+function calculateElementStresses(expanded, elemIndex, U){
+  // Calculate stresses at a specific point along an expanded element
+  // This function is called for each subsegment to build the stress profile
+  const e = expanded.elems[elemIndex];
+  const {fL, L} = elementEndForcesLocal(expanded, e, U);
+  
+  // Extract end forces (local coordinates)
+  // Node i: [Fx_i, Fy_i, Fz_i, Mx_i, My_i, Mz_i]
+  // Node j: [Fx_j, Fy_j, Fz_j, Mx_j, My_j, Mz_j]
+  const forces = {
+    i: {
+      Fx: fL[0], Fy: fL[1], Fz: fL[2],
+      Mx: fL[3], My: fL[4], Mz: fL[5]
+    },
+    j: {
+      Fx: fL[6], Fy: fL[7], Fz: fL[8],
+      Mx: fL[9], My: fL[10], Mz: fL[11]
+    }
+  };
+  
+  // AXIAL STRESS - CONSTANT along element (no distributed load)
+  // Using node i value (should equal -node j value for equilibrium)
+  const N = fL[0]; // Axial force (tension positive)
+  const sigma_axial = N / e.Ayz;
+  
+  // SHEAR FORCES - CONSTANT along element (no distributed load)
+  // Using node i values
+  const Vy = fL[1]; // Shear force in local y
+  const Vz = fL[2]; // Shear force in local z
+  
+  // Average shear stress (simplified - could use shape factor for more accuracy)
+  const tau_y = Math.abs(Vy) / e.Ayz;
+  const tau_z = Math.abs(Vz) / e.Ayz;
+  const tau_shear = Math.sqrt(tau_y*tau_y + tau_z*tau_z);
+  
+  // TORSION - CONSTANT along element
+  const Mx = fL[3]; // Torsional moment
+  // Approximate distance to extreme fiber for torsion
+  const c_torsion = Math.sqrt(Math.max(e.Iyy, e.Izz) / e.Ayz);
+  const tau_torsion = Math.abs(Mx) * c_torsion / e.Jyz;
+  
+  // BENDING MOMENTS - These are the values AT NODE i
+  // For stress variation along element, caller must interpolate
+  const My_i = fL[4]; // Moment about local y-axis at node i
+  const Mz_i = fL[5]; // Moment about local z-axis at node i
+  const My_j = fL[10]; // Moment about local y-axis at node j
+  const Mz_j = fL[11]; // Moment about local z-axis at node j
+  
+  // Estimate distance to extreme fiber (rectangular section assumption)
+  // For more accuracy, would need actual section dimensions
+  const c_y = Math.sqrt(e.Iyy / e.Ayz); // Distance in y-direction
+  const c_z = Math.sqrt(e.Izz / e.Ayz); // Distance in z-direction
+  
+  // Bending stresses at node i
+  const sigma_bend_y_i = Math.abs(My_i) * c_z / e.Izz;
+  const sigma_bend_z_i = Math.abs(Mz_i) * c_y / e.Iyy;
+  
+  // Bending stresses at node j
+  const sigma_bend_y_j = Math.abs(My_j) * c_z / e.Izz;
+  const sigma_bend_z_j = Math.abs(Mz_j) * c_y / e.Iyy;
+  
+  // Combined stresses at node i (extreme fibers)
+  const sigma_max_i = sigma_axial + sigma_bend_y_i + sigma_bend_z_i;
+  const sigma_min_i = sigma_axial - sigma_bend_y_i - sigma_bend_z_i;
+  
+  // Combined stresses at node j
+  const sigma_max_j = sigma_axial + sigma_bend_y_j + sigma_bend_z_j;
+  const sigma_min_j = sigma_axial - sigma_bend_y_j - sigma_bend_z_j;
+  
+  return {
+    forces,
+    moments: {
+      My_i, Mz_i, My_j, Mz_j
+    },
+    stresses: {
+      axial: sigma_axial,           // CONSTANT
+      shear: tau_shear,             // CONSTANT
+      torsion: tau_torsion,         // CONSTANT
+      bending_i: { 
+        My: sigma_bend_y_i,         // At node i
+        Mz: sigma_bend_z_i 
+      },
+      bending_j: { 
+        My: sigma_bend_y_j,         // At node j
+        Mz: sigma_bend_z_j 
+      },
+      combined_max_i: sigma_max_i,  // At node i
+      combined_min_i: sigma_min_i,
+      combined_max_j: sigma_max_j,  // At node j
+      combined_min_j: sigma_min_j
+    },
+    length: L,
+    sectionProperties: { c_y, c_z, Ayz: e.Ayz, Izz: e.Izz, Iyy: e.Iyy }
+  };
+}
+
+function summarizeStresses(expanded, U){
+  // Summary of max/min stresses across all elements
+  let maxSig = { val:-Infinity, at:"" };
+  let minSig = { val:+Infinity, at:"" };
+  
+  for(let i=0; i<expanded.elems.length; i++){
+    const result = calculateElementStresses(expanded, i, U);
+    const e = expanded.elems[i];
+    
+    const localMax = Math.max(
+      result.stresses.combined_max_i,
+      result.stresses.combined_max_j
+    );
+    const localMin = Math.min(
+      result.stresses.combined_min_i,
+      result.stresses.combined_min_j
+    );
+    
+    const where = `seg ${e.primaryElemId}, sub ${e.subIndex}`;
+    if(localMax > maxSig.val) maxSig = { val:localMax, at:where };
+    if(localMin < minSig.val) minSig = { val:localMin, at:where };
+  }
+  
+  return { maxSig, minSig };
+}
+
+function verifyElementForces(elemId){
+  // Diagnostic function to verify internal forces are consistent across subsegments
+  if(!Model.lastSolution) return null;
+  
+  const subElems = Model.lastSolution.expanded.elems.filter(e => e.primaryElemId === elemId);
+  if(subElems.length === 0) return null;
+  
+  const forceData = [];
+  
+  for(let i = 0; i < subElems.length; i++){
+    const e = subElems[i];
+    const elemIdx = Model.lastSolution.expanded.elems.indexOf(e);
+
+const {fL} = elementEndForcesLocal(Model.lastSolution.expanded, e, Model.lastSolution.U);
+    
+    forceData.push({
+      subseg: i + 1,
+      Fx_i: fL[0],  // Axial force at node i
+      Fx_j: fL[6],  // Axial force at node j (should be -Fx_i)
+      Fy_i: fL[1],  // Shear y at node i
+      Fy_j: fL[7],  // Shear y at node j (should be -Fy_i)
+      Fz_i: fL[2],  // Shear z at node i
+      Fz_j: fL[8],  // Shear z at node j (should be -Fz_i)
+      Mx_i: fL[3],  // Torsion at node i
+      Mx_j: fL[9],  // Torsion at node j (should be -Mx_i)
+      My_i: fL[4],  // Moment y at node i
+      My_j: fL[10], // Moment y at node j
+      Mz_i: fL[5],  // Moment z at node i
+      Mz_j: fL[11]  // Moment z at node j
+    });
+  }
+  
+  // Check consistency
+  const axialValues = forceData.map(d => d.Fx_i);
+  const shearYValues = forceData.map(d => d.Fy_i);
+  const shearZValues = forceData.map(d => d.Fz_i);
+  const torsionValues = forceData.map(d => d.Mx_i);
+  
+  const axialRange = Math.max(...axialValues) - Math.min(...axialValues);
+  const shearYRange = Math.max(...shearYValues) - Math.min(...shearYValues);
+  const shearZRange = Math.max(...shearZValues) - Math.min(...shearZValues);
+  const torsionRange = Math.max(...torsionValues) - Math.min(...torsionValues);
+  
+  return {
+    forceData,
+    consistency: {
+      axial: { range: axialRange, isConstant: axialRange < 1e-3 },
+      shearY: { range: shearYRange, isConstant: shearYRange < 1e-3 },
+      shearZ: { range: shearZRange, isConstant: shearZRange < 1e-3 },
+      torsion: { range: torsionRange, isConstant: torsionRange < 1e-3 }
+    }
+  };
+}
+function computePrimarySegmentResultRow(elemId){
+  if(!Model.lastSolution) throw new Error("No solution. Run Static Solve first.");
+
+  const elem = Model.elemById.get(elemId);
+  if(!elem) throw new Error(`Element ${elemId} not found`);
+
+  // Gather subsegments in order
+  const subElems = Model.lastSolution.expanded.elems.filter(e => e.primaryElemId === elemId);
+  if(subElems.length === 0) throw new Error(`No expanded subsegments for element ${elemId}`);
+
+  const firstSub = subElems[0];
+  const lastSub  = subElems[subElems.length - 1];
+
+  const idxFirst = Model.lastSolution.expanded.elems.indexOf(firstSub);
+  const idxLast  = Model.lastSolution.expanded.elems.indexOf(lastSub);
+
+  const first = calculateElementStresses(Model.lastSolution.expanded, idxFirst, Model.lastSolution.U);
+  const last  = calculateElementStresses(Model.lastSolution.expanded, idxLast,  Model.lastSolution.U);
+
+  const ni = Model.nodeById.get(elem.ni);
+  const nj = Model.nodeById.get(elem.nj);
+  const L  = Math.hypot(nj.x-ni.x, nj.y-ni.y, nj.z-ni.z);
+
+  // End forces/moments (local)
+  const N   = first.forces.i.Fx;
+  const Vy0 = first.forces.i.Fy;
+  const Vz0 = first.forces.i.Fz;
+  const Mx0 = first.forces.i.Mx;
+  const My_i = first.forces.i.My;
+  const Mz_i = first.forces.i.Mz;
+  const My_j = last.forces.j.My;
+  const Mz_j = last.forces.j.Mz;
+
+  // Self-weight (local components) for reporting (your Option 2 uses these)
+  let wLx=0, wLy=0, wLz=0, w=0;
+  if((elem.rho || 0) !== 0){
+    const g = getGravity();
+    w = (elem.rho || 0) * elem.Ayz * g; // force/length, global -Z
+    const wg = {x:0,y:0,z:-w};
+    const T = build3DTransformationMatrix(ni, nj, elem.x3, elem.y3, elem.z3);
+    const R = [
+      [T[0][0],T[0][1],T[0][2]],
+      [T[1][0],T[1][1],T[1][2]],
+      [T[2][0],T[2][1],T[2][2]]
+    ];
+    wLx = R[0][0]*wg.x + R[0][1]*wg.y + R[0][2]*wg.z;
+    wLy = R[1][0]*wg.x + R[1][1]*wg.y + R[1][2]*wg.z;
+    wLz = R[2][0]*wg.x + R[2][1]*wg.y + R[2][2]*wg.z;
+  }
+
+  // Combined stress envelope from your stressProfile logic (Option 2 curvature)
+  // Use a moderate sampling for CSV summary
+  const c_y = first.sectionProperties.c_y;
+  const c_z = first.sectionProperties.c_z;
+
+  const Ayz = elem.Ayz, Izz = elem.Izz, Iyy = elem.Iyy;
+  const sigma_axial = N / Ayz;
+
+  let sigmaMax = -Infinity;
+  let sigmaMin = +Infinity;
+
+  const npts = 41;
+  for(let i=0;i<npts;i++){
+    const x = (i/(npts-1)) * L;
+
+    const Mz_x = Mz_i + Vy0*x - 0.5*wLy*x*x;
+    const My_x = My_i + Vz0*x - 0.5*wLz*x*x;
+
+    const sigma_bend_My = Math.abs(My_x) * c_z / Izz;
+    const sigma_bend_Mz = Math.abs(Mz_x) * c_y / Iyy;
+
+    const smax = sigma_axial + sigma_bend_My + sigma_bend_Mz;
+    const smin = sigma_axial - sigma_bend_My - sigma_bend_Mz;
+
+    if(smax > sigmaMax) sigmaMax = smax;
+    if(smin < sigmaMin) sigmaMin = smin;
+  }
+
+  // Direction cosines (for traceability)
+  const basis = localAxesFromElem(ni, nj, elem);
+  const xhat = basis.xhat || {x:NaN,y:NaN,z:NaN};
+  const yhat = basis.yhat || {x:NaN,y:NaN,z:NaN};
+  const zhat = basis.zhat || {x:NaN,y:NaN,z:NaN};
+
+  return {
+    elemId,
+    ni: elem.ni,
+    nj: elem.nj,
+    L,
+    E: elem.E, G: elem.G,
+    Ayz: elem.Ayz, Izz: elem.Izz, Iyy: elem.Iyy, Jyz: elem.Jyz,
+    rho: (elem.rho||0),
+    w, wLx, wLy, wLz,
+    N, Vy0, Vz0, Mx0,
+    My_i, My_j, Mz_i, Mz_j,
+    sigmaMax, sigmaMin,
+    xhat, yhat, zhat
+  };
+}
+
+function exportResultsCSV(){
+  if(!Model.lastSolution) throw new Error("No solution. Run Static Solve first.");
+
+  const now = new Date();
+  const tsISO = now.toISOString();
+
+  const headers = [
+    "timestampISO","unitSystem",
+    "elem","ni","nj","L",
+    "E","G","Ayz","Izz","Iyy","Jyz","rho",
+    "w_globalMinusZ","wLx","wLy","wLz",
+    "N_Fx","Vy_i","Vz_i","Mx_i",
+    "My_i","My_j","Mz_i","Mz_j",
+    "sigmaMax_env","sigmaMin_env",
+    "xhat_x","xhat_y","xhat_z",
+    "yhat_x","yhat_y","yhat_z",
+    "zhat_x","zhat_y","zhat_z"
+  ];
+
+  const lines = [];
+  lines.push(headers.join(","));
+
+  for(const e of Model.elems){
+    const r = computePrimarySegmentResultRow(e.id);
+
+    const row = [
+      tsISO, UNIT_SYSTEM,
+      r.elemId, r.ni, r.nj, r.L,
+      r.E, r.G, r.Ayz, r.Izz, r.Iyy, r.Jyz, r.rho,
+      r.w, r.wLx, r.wLy, r.wLz,
+      r.N, r.Vy0, r.Vz0, r.Mx0,
+      r.My_i, r.My_j, r.Mz_i, r.Mz_j,
+      r.sigmaMax, r.sigmaMin,
+      r.xhat.x, r.xhat.y, r.xhat.z,
+      r.yhat.x, r.yhat.y, r.yhat.z,
+      r.zhat.x, r.zhat.y, r.zhat.z
+    ].map(v => (Number.isFinite(v) ? v : (typeof v === "string" ? `"${v.replaceAll('"','""')}"` : v)));
+
+    lines.push(row.join(","));
+  }
+
+  const csv = lines.join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  downloadBlob(blob, `frame3d_results_${timestampForFilename(now)}.csv`);
+}
+
+
+function displayElementAnalysis(elemId, viewMode){
+  // Display analysis for a primary segment with selectable view modes
+  // Includes self-weight curvature in moment & shear diagrams.
+  // Convention:
+  //   uL = T * uG   (T maps GLOBAL -> LOCAL for displacements/vectors)
+  //   Kglobal = T^T kL T
+  //   fG = T^T fL
+
+  if(!Model.lastSolution){
+    el.stressContent.innerHTML =
+      '<div style="color:var(--muted); font-size:12px; text-align:center; padding:20px;">Run Static Solve first to analyze stresses.</div>';
+    el.stressViewSelector.disabled = true;
+    return;
+  }
+
+  const elem = Model.elemById.get(elemId);
+  if(!elem){
+    el.stressContent.innerHTML =
+      '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">Element not found.</div>';
+    el.stressViewSelector.disabled = true;
+    return;
+  }
+
+  el.stressViewSelector.disabled = false;
+
+  // Expanded sub-elements that make up this primary element (in order)
+  const subElems = Model.lastSolution.expanded.elems.filter(e => e.primaryElemId === elemId);
+  if(subElems.length === 0){
+    el.stressContent.innerHTML =
+      '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">No subsegments found.</div>';
+    return;
+  }
+
+  // Primary endpoints
+  const ni_primary = Model.nodeById.get(elem.ni);
+  const nj_primary = Model.nodeById.get(elem.nj);
+  if(!ni_primary || !nj_primary){
+    el.stressContent.innerHTML =
+      '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">Element references missing primary nodes.</div>';
+    return;
+  }
+
+  const dxp = nj_primary.x - ni_primary.x;
+  const dyp = nj_primary.y - ni_primary.y;
+  const dzp = nj_primary.z - ni_primary.z;
+  const L_primary = Math.sqrt(dxp*dxp + dyp*dyp + dzp*dzp);
+  if(!(L_primary > 0)){
+    el.stressContent.innerHTML =
+      '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">Primary element has zero length.</div>';
+    return;
+  }
+
+  // Section properties
+  const Ayz = elem.Ayz;
+  const Izz = elem.Izz;
+  const Iyy = elem.Iyy;
+  const Jyz = elem.Jyz;
+
+  // Use first subsegment to get section-derived "c" values (your existing convention)
+  const idxFirst = Model.lastSolution.expanded.elems.indexOf(subElems[0]);
+  const firstForces = calculateElementStresses(Model.lastSolution.expanded, idxFirst, Model.lastSolution.U);
+  const c_y = firstForces.sectionProperties.c_y;
+  const c_z = firstForces.sectionProperties.c_z;
+
+  // -------------------------------
+  // SELF-WEIGHT: global -Z line load to LOCAL components for the PRIMARY member
+  // (We apply these components along the member for varying V/M)
+  // -------------------------------
+  let wLx = 0, wLy = 0, wLz = 0; // force/length in LOCAL axes of the primary member
+  {
+    const rho = (elem.rho || 0);
+    if(rho !== 0){
+      const g = getGravity();
+      const w = rho * elem.Ayz * g; // magnitude (force/length)
+      if(Math.abs(w) > 0){
+        const wg = {x:0, y:0, z:-w};
+
+        const Tprim = build3DTransformationMatrix(ni_primary, nj_primary, elem.x3, elem.y3, elem.z3);
+        const R = [
+          [Tprim[0][0], Tprim[0][1], Tprim[0][2]],
+          [Tprim[1][0], Tprim[1][1], Tprim[1][2]],
+          [Tprim[2][0], Tprim[2][1], Tprim[2][2]]
+        ];
+
+        wLx = R[0][0]*wg.x + R[0][1]*wg.y + R[0][2]*wg.z;
+        wLy = R[1][0]*wg.x + R[1][1]*wg.y + R[1][2]*wg.z;
+        wLz = R[2][0]*wg.x + R[2][1]*wg.y + R[2][2]*wg.z;
+      }
+    }
+  }
+
+  // -------------------------------
+  // Build a smooth profile by sampling WITHIN each subsegment and
+  // carrying moments across subsegment boundaries to eliminate steps.
+  // -------------------------------
+  const samplesPerSub = 31; // increase for smoother curves (e.g., 41)
+  const stressProfile = [];
+
+  let xCum = 0;       // distance along primary member
+  let MyCarry = null; // carried start moment for next subsegment
+  let MzCarry = null;
+
+  // We use end forces recovered per subsegment (local to that subsegment),
+  // but we apply distributed-load curvature using PRIMARY wLy,wLz consistently.
+  for(let sIdx = 0; sIdx < subElems.length; sIdx++){
+    const se = subElems[sIdx];
+    const seIdx = Model.lastSolution.expanded.elems.indexOf(se);
+    const seRes = calculateElementStresses(Model.lastSolution.expanded, seIdx, Model.lastSolution.U);
+
+    // Recovered i-end actions for this subsegment (LOCAL)
+    const Vy_i = seRes.forces.i.Fy;
+    const Vz_i = seRes.forces.i.Fz;
+    const My_i = seRes.forces.i.My;
+    const Mz_i = seRes.forces.i.Mz;
+
+    // Subsegment length
+    const ni = Model.lastSolution.expanded.nodes[se.ni];
+    const nj = Model.lastSolution.expanded.nodes[se.nj];
+    const dx = nj.x - ni.x, dy = nj.y - ni.y, dz = nj.z - ni.z;
+    const Ls = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if(!(Ls > 0)) continue;
+
+    // Starting moments for this subsegment: carry-forward to enforce continuity
+    const My0 = (MyCarry === null) ? My_i : MyCarry;
+    const Mz0 = (MzCarry === null) ? Mz_i : MzCarry;
+
+    // Sample points inside this subsegment
+    // include the first point only for the first subsegment to avoid duplicate x
+    const iStart = (sIdx === 0) ? 0 : 1;
+    for(let k = iStart; k <= samplesPerSub; k++){
+      const xi = k / samplesPerSub;
+      const xLocal = xi * Ls;
+      const xGlobal = xCum + xLocal;
+      const pos = xGlobal / L_primary;
+
+      // V(x) = V_i - w*x
+      const Vy_x = Vy_i - wLy * xLocal;
+      const Vz_x = Vz_i - wLz * xLocal;
+
+      // M(x) = M0 + V_i*x - 0.5*w*x^2
+      const My_x = My0 + Vz_i * xLocal - 0.5 * wLz * xLocal * xLocal;
+      const Mz_x = Mz0 + Vy_i * xLocal - 0.5 * wLy * xLocal * xLocal;
+
+      const sigma_axial = (seRes.forces.i.Fx) / Ayz;
+
+      const sigma_bend_My = Math.abs(My_x) * c_z / Izz;
+      const sigma_bend_Mz = Math.abs(Mz_x) * c_y / Iyy;
+
+      const sigma_max = sigma_axial + sigma_bend_My + sigma_bend_Mz;
+      const sigma_min = sigma_axial - sigma_bend_My - sigma_bend_Mz;
+
+      const tau_y = Math.abs(Vy_x) / Ayz;
+      const tau_z = Math.abs(Vz_x) / Ayz;
+      const tau_shear = Math.sqrt(tau_y*tau_y + tau_z*tau_z);
+
+      const c_torsion = Math.sqrt(Math.max(Iyy, Izz) / Ayz);
+      const tau_torsion = Math.abs(seRes.forces.i.Mx) * c_torsion / Jyz;
+
+      stressProfile.push({
+        position: pos,
+        x: xGlobal,
+        Vy: Vy_x,
+        Vz: Vz_x,
+        My: My_x,
+        Mz: Mz_x,
+        sigma_axial,
+        sigma_bend_My,
+        sigma_bend_Mz,
+        sigma_max,
+        sigma_min,
+        tau_shear,
+        tau_torsion
+      });
+    }
+
+    // Carry moments to next subsegment end (x = Ls)
+    MyCarry = My0 + Vz_i * Ls - 0.5 * wLz * Ls * Ls;
+    MzCarry = Mz0 + Vy_i * Ls - 0.5 * wLy * Ls * Ls;
+
+    xCum += Ls;
+  }
+
+  // Mode
+  const mode = viewMode || el.stressViewSelector.value;
+
+  let html = `<div class="stressLabel">Segment ${elemId}: Node ${elem.ni} → ${elem.nj}</div>`;
+  html += `<div class="stressValue" style="margin-bottom:8px;">Length: ${L_primary.toFixed(3)} | subsegments: ${subElems.length} | samples/sub: ${samplesPerSub}</div>`;
+
+  // Self-weight info
+  if((elem.rho||0) !== 0){
+    const g = getGravity();
+    const w = (elem.rho||0) * elem.Ayz * g;
+    html += `<div class="stressValue" style="margin-bottom:10px;">Self-weight: w = ρ·A·g = ${w.toExponential(3)} (global -Z); local components: wx=${wLx.toExponential(3)}, wy=${wLy.toExponential(3)}, wz=${wLz.toExponential(3)}</div>`;
+  }
+
+  if(mode === 'table'){
+    html += buildStressTableCorrected(stressProfile);
+  }
+  else if(mode === 'moment'){
+    html += buildMomentDiagramsCorrected(stressProfile, elem);
+
+    // Show end moments from last sample (for sanity)
+    const My_i = stressProfile[0]?.My ?? 0;
+    const Mz_i = stressProfile[0]?.Mz ?? 0;
+    const My_j = stressProfile[stressProfile.length-1]?.My ?? 0;
+    const Mz_j = stressProfile[stressProfile.length-1]?.Mz ?? 0;
+
+    html += '<div style="margin-top:8px; font-size:11px;">';
+    html += `<div class="stressValue">End moments (stitched): My_i=${My_i.toFixed(3)}, My_j=${My_j.toFixed(3)} | Mz_i=${Mz_i.toFixed(3)}, Mz_j=${Mz_j.toFixed(3)}</div>`;
+    html += '</div>';
+  }
+  else if(mode === 'shear'){
+    // Inline varying shear (linear if self-weight exists)
+    const width = el.stressContent.clientWidth - 40;
+    const height = 170;
+    const margin = {top: 20, right: 60, bottom: 40, left: 60};
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+
+    const pos = stressProfile.map(sp => sp.position);
+    const Vy_vals = stressProfile.map(sp => sp.Vy);
+    const Vz_vals = stressProfile.map(sp => sp.Vz);
+    const Vmax = Math.max(
+      ...Vy_vals.map(v=>Math.abs(v)),
+      ...Vz_vals.map(v=>Math.abs(v)),
+      1
+    );
+
+    const yScale = (plotHeight/2) / Vmax;
+    const yZero = margin.top + plotHeight/2;
+
+    html += '<div style="margin-bottom:10px; font-size:11px;">';
+    html += '<div class="stressLabel">Shear Force Diagrams (Local Coordinates)</div>';
+    html += '<div class="stressValue">Vy(x)=Vy_i−wy·x, Vz(x)=Vz_i−wz·x</div>';
+    html += '</div>';
+
+    html += `<svg width="${width}" height="${height}" style="border:1px solid var(--line); background:#fff;">`;
+    html += `<line x1="${margin.left}" y1="${yZero}" x2="${margin.left + plotWidth}" y2="${yZero}" stroke="#ccc" stroke-width="1"/>`;
+    html += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#666" stroke-width="1"/>`;
+
+    let pathVy = `M ${margin.left} ${yZero - Vy_vals[0]*yScale}`;
+    for(let i=1;i<pos.length;i++){
+      const x = margin.left + pos[i]*plotWidth;
+      const y = yZero - Vy_vals[i]*yScale;
+      pathVy += ` L ${x} ${y}`;
+    }
+    html += `<path d="${pathVy}" fill="none" stroke="#dc2626" stroke-width="2"/>`;
+
+    let pathVz = `M ${margin.left} ${yZero - Vz_vals[0]*yScale}`;
+    for(let i=1;i<pos.length;i++){
+      const x = margin.left + pos[i]*plotWidth;
+      const y = yZero - Vz_vals[i]*yScale;
+      pathVz += ` L ${x} ${y}`;
+    }
+    html += `<path d="${pathVz}" fill="none" stroke="#2563eb" stroke-width="2"/>`;
+
+    html += `<text x="${margin.left + plotWidth/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Position along element</text>`;
+    html += `<text x="${15}" y="${margin.top + plotHeight/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90, 15, ${margin.top + plotHeight/2})">Shear</text>`;
+
+    html += `<line x1="${width - 170}" y1="${margin.top + 10}" x2="${width - 150}" y2="${margin.top + 10}" stroke="#dc2626" stroke-width="2"/>`;
+    html += `<text x="${width - 145}" y="${margin.top + 14}" font-size="10" fill="#666">Vy</text>`;
+    html += `<line x1="${width - 170}" y1="${margin.top + 25}" x2="${width - 150}" y2="${margin.top + 25}" stroke="#2563eb" stroke-width="2"/>`;
+    html += `<text x="${width - 145}" y="${margin.top + 29}" font-size="10" fill="#666">Vz</text>`;
+
+    html += `</svg>`;
+
+    const Vy_min = Math.min(...Vy_vals), Vy_max = Math.max(...Vy_vals);
+    const Vz_min = Math.min(...Vz_vals), Vz_max = Math.max(...Vz_vals);
+
+    html += '<div style="margin-top:8px; font-size:11px;">';
+    html += `<div class="stressValue">Vy range: ${Vy_min.toFixed(3)} to ${Vy_max.toFixed(3)}</div>`;
+    html += `<div class="stressValue">Vz range: ${Vz_min.toFixed(3)} to ${Vz_max.toFixed(3)}</div>`;
+    html += '</div>';
+  }
+  else if(mode === 'combined'){
+    html += buildCombinedStressDiagramCorrected(stressProfile, elem);
+  }
+
+  el.stressContent.innerHTML = html;
+}
+
+
+function buildStressTableCorrected(stressProfile){
+  // Table with corrected constant/varying values
+  
+  let html = '<table class="stressTable"><thead><tr>';
+  html += '<th>Position</th><th>Axial*<br>(σ)</th><th>Bend My<br>(σ)</th><th>Bend Mz<br>(σ)</th>';
+  html += '<th>Combined<br>Max (σ)</th><th>Combined<br>Min (σ)</th><th>Shear*<br>(τ)</th><th>Torsion*<br>(τ)</th>';
+  html += '</tr></thead><tbody>';
+  
+  stressProfile.forEach((sp) => {
+    const posPercent = (sp.position * 100).toFixed(0);
+    
+    html += '<tr>';
+    html += `<td>${posPercent}%</td>`;
+    html += `<td>${sp.sigma_axial.toFixed(2)}</td>`;
+    html += `<td>${sp.sigma_bend_My.toFixed(2)}</td>`;
+    html += `<td>${sp.sigma_bend_Mz.toFixed(2)}</td>`;
+    html += `<td>${sp.sigma_max.toFixed(2)}</td>`;
+    html += `<td>${sp.sigma_min.toFixed(2)}</td>`;
+    html += `<td>${sp.tau_shear.toFixed(2)}</td>`;
+    html += `<td>${sp.tau_torsion.toFixed(2)}</td>`;
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table>';
+  
+  // Summary
+  const sigma_axial = stressProfile[0].sigma_axial;
+  const tau_shear = stressProfile[0].tau_shear;
+  const tau_torsion = stressProfile[0].tau_torsion;
+  const maxCombined = Math.max(...stressProfile.map(sp => sp.sigma_max));
+  const minCombined = Math.min(...stressProfile.map(sp => sp.sigma_min));
+  
+  html += '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:11px;">';
+  html += '<div class="stressLabel">Summary (* = constant values):</div>';
+  html += `<div class="stressValue">Axial*: ${sigma_axial.toFixed(2)} | Shear*: ${tau_shear.toFixed(2)} | Torsion*: ${tau_torsion.toFixed(2)}</div>`;
+  html += `<div class="stressValue">Combined Envelope: Max=${maxCombined.toFixed(2)}, Min=${minCombined.toFixed(2)}</div>`;
+  html += '</div>';
+  
+  // DIAGNOSTIC: Verify subsegment forces if available
+  if(View.selectedSegmentForAnalysis !== null){
+    const verification = verifyElementForces(View.selectedSegmentForAnalysis);
+    if(verification && !verification.consistency.axial.isConstant){
+      html += '<div style="margin-top:8px; padding:8px; background:#fee; border:1px solid #fcc; border-radius:4px; font-size:10px;">';
+      html += '<strong>⚠️ SOLVER ERROR DETECTED:</strong><br>';
+      html += `Axial force varies by ${verification.consistency.axial.range.toFixed(2)} across subsegments.<br>`;
+      html += `This violates equilibrium and indicates a bug in the solver or force recovery.<br>`;
+      html += '<button onclick="console.log(verifyElementForces(' + View.selectedSegmentForAnalysis + '))" style="margin-top:4px; padding:2px 6px; font-size:10px;">Log Details to Console</button>';
+      html += '</div>';
+    }
+  }
+  
+  return html;
+}
+
+function buildMomentDiagramsCorrected(stressProfile, elem){
+  // Plot My and Mz along element length
+  const width = el.stressContent.clientWidth - 40;
+  const height = 200;
+  const margin = {top: 20, right: 60, bottom: 40, left: 60};
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  
+  // Extract moment data
+  const positions = stressProfile.map(sp => sp.position);
+  const My_values = stressProfile.map(sp => sp.My);
+  const Mz_values = stressProfile.map(sp => sp.Mz);
+  
+  const My_max = Math.max(...My_values.map(Math.abs));
+  const Mz_max = Math.max(...Mz_values.map(Math.abs));
+  const M_max = Math.max(My_max, Mz_max) || 1;
+  
+  let html = '<div style="margin-bottom:10px; font-size:11px;">';
+  html += '<div class="stressLabel">Bending Moment Diagrams (Local Coordinates)</div>';
+  html += '<div class="stressValue">My = moment about local y-axis (causes bending in x-z plane)</div>';
+  html += '<div class="stressValue">Mz = moment about local z-axis (causes bending in x-y plane)</div>';
+  html += '</div>';
+  
+  html += `<svg width="${width}" height="${height}" style="border:1px solid var(--line); background:#fff;">`;
+  
+  const yScale = plotHeight / 2 / M_max;
+  const yZero = margin.top + plotHeight / 2;
+  
+  // Axes
+  html += `<line x1="${margin.left}" y1="${yZero}" x2="${margin.left + plotWidth}" y2="${yZero}" stroke="#ccc" stroke-width="1"/>`;
+  html += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#666" stroke-width="1"/>`;
+  
+  // Plot My line
+  let pathMy = `M ${margin.left} ${yZero - My_values[0] * yScale}`;
+  for(let i = 1; i < positions.length; i++){
+    const x = margin.left + positions[i] * plotWidth;
+    const y = yZero - My_values[i] * yScale;
+    pathMy += ` L ${x} ${y}`;
+  }
+  html += `<path d="${pathMy}" fill="none" stroke="#dc2626" stroke-width="2"/>`;
+  
+  // Plot Mz line
+  let pathMz = `M ${margin.left} ${yZero - Mz_values[0] * yScale}`;
+  for(let i = 1; i < positions.length; i++){
+    const x = margin.left + positions[i] * plotWidth;
+    const y = yZero - Mz_values[i] * yScale;
+    pathMz += ` L ${x} ${y}`;
+  }
+  html += `<path d="${pathMz}" fill="none" stroke="#2563eb" stroke-width="2"/>`;
+  
+  // Labels
+  html += `<text x="${margin.left + plotWidth/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Position along element</text>`;
+  html += `<text x="${15}" y="${margin.top + plotHeight/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90, 15, ${margin.top + plotHeight/2})">Moment</text>`;
+  
+  // Legend
+  html += `<line x1="${width - 150}" y1="${margin.top + 10}" x2="${width - 130}" y2="${margin.top + 10}" stroke="#dc2626" stroke-width="2"/>`;
+  html += `<text x="${width - 125}" y="${margin.top + 14}" font-size="10" fill="#666">My</text>`;
+  html += `<line x1="${width - 150}" y1="${margin.top + 25}" x2="${width - 130}" y2="${margin.top + 25}" stroke="#2563eb" stroke-width="2"/>`;
+  html += `<text x="${width - 125}" y="${margin.top + 29}" font-size="10" fill="#666">Mz</text>`;
+  
+  html += '</svg>';
+  
+  // Values
+  html += '<div style="margin-top:8px; font-size:11px;">';
+  html += `<div class="stressValue">My range: ${Math.min(...My_values).toFixed(1)} to ${Math.max(...My_values).toFixed(1)}</div>`;
+  html += `<div class="stressValue">Mz range: ${Math.min(...Mz_values).toFixed(1)} to ${Math.max(...Mz_values).toFixed(1)}</div>`;
+  html += '</div>';
+  
+  return html;
+}
+
+function buildShearDiagramsCorrected(Vy, Vz){
+  // Plot constant shear forces
+  const width = el.stressContent.clientWidth - 40;
+  const height = 150;
+  const margin = {top: 20, right: 60, bottom: 40, left: 60};
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  
+  let html = '<div style="margin-bottom:10px; font-size:11px;">';
+  html += '<div class="stressLabel">Shear Force Diagrams (Local Coordinates)</div>';
+  html += '<div class="stressValue">Vy and Vz are CONSTANT (no distributed load)</div>';
+  html += '</div>';
+  
+  html += `<svg width="${width}" height="${height}" style="border:1px solid var(--line); background:#fff;">`;
+  
+  const V_max = Math.max(Math.abs(Vy), Math.abs(Vz)) || 1;
+  const yScale = plotHeight / 2 / V_max;
+  const yZero = margin.top + plotHeight / 2;
+  
+  // Axes
+  html += `<line x1="${margin.left}" y1="${yZero}" x2="${margin.left + plotWidth}" y2="${yZero}" stroke="#ccc" stroke-width="1"/>`;
+  html += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#666" stroke-width="1"/>`;
+  
+  // Constant Vy line
+  const yVy = yZero - Vy * yScale;
+  html += `<line x1="${margin.left}" y1="${yVy}" x2="${margin.left + plotWidth}" y2="${yVy}" stroke="#dc2626" stroke-width="2"/>`;
+  
+  // Constant Vz line
+  const yVz = yZero - Vz * yScale;
+  html += `<line x1="${margin.left}" y1="${yVz}" x2="${margin.left + plotWidth}" y2="${yVz}" stroke="#2563eb" stroke-width="2"/>`;
+  
+  // Labels
+  html += `<text x="${margin.left + plotWidth/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Position along element</text>`;
+  html += `<text x="${15}" y="${margin.top + plotHeight/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90, 15, ${margin.top + plotHeight/2})">Shear Force</text>`;
+  
+  // Legend
+  html += `<line x1="${width - 150}" y1="${margin.top + 10}" x2="${width - 130}" y2="${margin.top + 10}" stroke="#dc2626" stroke-width="2"/>`;
+  html += `<text x="${width - 125}" y="${margin.top + 14}" font-size="10" fill="#666">Vy = ${Vy.toFixed(2)}</text>`;
+  html += `<line x1="${width - 150}" y1="${margin.top + 25}" x2="${width - 130}" y2="${margin.top + 25}" stroke="#2563eb" stroke-width="2"/>`;
+  html += `<text x="${width - 125}" y="${margin.top + 29}" font-size="10" fill="#666">Vz = ${Vz.toFixed(2)}</text>`;
+  
+  html += '</svg>';
+  
+  return html;
+}
+
+function buildCombinedStressDiagramCorrected(stressProfile, elem){
+  // Plot combined max and min stress along element
+  const width = el.stressContent.clientWidth - 40;
+  const height = 200;
+  const margin = {top: 20, right: 60, bottom: 40, left: 60};
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  
+  const positions = stressProfile.map(sp => sp.position);
+  const maxStress = stressProfile.map(sp => sp.sigma_max);
+  const minStress = stressProfile.map(sp => sp.sigma_min);
+  
+  const globalMax = Math.max(...maxStress);
+  const globalMin = Math.min(...minStress);
+  const range = Math.max(Math.abs(globalMax), Math.abs(globalMin)) || 1;
+  
+  let html = '<div style="margin-bottom:10px; font-size:11px;">';
+  html += '<div class="stressLabel">Combined Normal Stress Envelope</div>';
+  html += '<div class="stressValue">σ = σ_axial + σ_bending (at extreme fibers)</div>';
+  html += '</div>';
+  
+  html += `<svg width="${width}" height="${height}" style="border:1px solid var(--line); background:#fff;">`;
+  
+  const yScale = plotHeight / 2 / range;
+  const yZero = margin.top + plotHeight / 2;
+  
+  // Axes
+  html += `<line x1="${margin.left}" y1="${yZero}" x2="${margin.left + plotWidth}" y2="${yZero}" stroke="#ccc" stroke-width="1"/>`;
+  html += `<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + plotHeight}" stroke="#666" stroke-width="1"/>`;
+  
+  // Plot max stress (upper envelope)
+  let pathMax = `M ${margin.left} ${yZero - maxStress[0] * yScale}`;
+  for(let i = 1; i < positions.length; i++){
+    const x = margin.left + positions[i] * plotWidth;
+    const y = yZero - maxStress[i] * yScale;
+    pathMax += ` L ${x} ${y}`;
+  }
+  html += `<path d="${pathMax}" fill="none" stroke="#dc2626" stroke-width="2"/>`;
+  
+  // Plot min stress (lower envelope)
+  let pathMin = `M ${margin.left} ${yZero - minStress[0] * yScale}`;
+  for(let i = 1; i < positions.length; i++){
+    const x = margin.left + positions[i] * plotWidth;
+    const y = yZero - minStress[i] * yScale;
+    pathMin += ` L ${x} ${y}`;
+  }
+  html += `<path d="${pathMin}" fill="none" stroke="#2563eb" stroke-width="2"/>`;
+  
+  // Fill between curves
+  const fillPath = pathMax + ' ' + pathMin.split(' ').reverse().join(' ') + ' Z';
+  html += `<path d="${fillPath}" fill="rgba(147, 51, 234, 0.1)" stroke="none"/>`;
+  
+  // Labels
+  html += `<text x="${margin.left + plotWidth/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Position along element</text>`;
+  html += `<text x="${15}" y="${margin.top + plotHeight/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90, 15, ${margin.top + plotHeight/2})">Stress (σ)</text>`;
+  
+  // Legend
+  html += `<line x1="${width - 180}" y1="${margin.top + 10}" x2="${width - 160}" y2="${margin.top + 10}" stroke="#dc2626" stroke-width="2"/>`;
+  html += `<text x="${width - 155}" y="${margin.top + 14}" font-size="10" fill="#666">Max = ${globalMax.toFixed(2)}</text>`;
+  html += `<line x1="${width - 180}" y1="${margin.top + 25}" x2="${width - 160}" y2="${margin.top + 25}" stroke="#2563eb" stroke-width="2"/>`;
+  html += `<text x="${width - 155}" y="${margin.top + 29}" font-size="10" fill="#666">Min = ${globalMin.toFixed(2)}</text>`;
+  
+  html += '</svg>';
+  
+  return html;
+}
+
+function displayElementAnalysis1(elemId, viewMode){
+  // Display analysis for a primary segment with selectable view modes
+  if(!Model.lastSolution){
+    el.stressContent.innerHTML = '<div style="color:var(--muted); font-size:12px; text-align:center; padding:20px;">Run Static Solve first to analyze stresses.</div>';
+    el.stressViewSelector.disabled = true;
+    return;
+  }
+  
+  const elem = Model.elemById.get(elemId);
+  if(!elem){
+    el.stressContent.innerHTML = '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">Element not found.</div>';
+    el.stressViewSelector.disabled = true;
+    return;
+  }
+  
+  // Enable view selector
+  el.stressViewSelector.disabled = false;
+  
+  // Find all expanded sub-elements for this primary element
+  const subElems = Model.lastSolution.expanded.elems.filter(e => e.primaryElemId === elemId);
+  
+  if(subElems.length === 0){
+    el.stressContent.innerHTML = '<div style="color:var(--err); font-size:12px; text-align:center; padding:20px;">No subsegments found.</div>';
+    return;
+  }
+  
+  // Calculate stresses for all subsegments
+  const stressData = subElems.map((e, idx) => {
+    const elemIdx = Model.lastSolution.expanded.elems.indexOf(e);
+    const data = calculateElementStresses(Model.lastSolution.expanded, elemIdx, Model.lastSolution.U);
+    const ni = Model.lastSolution.expanded.nodes[e.ni];
+    const nj = Model.lastSolution.expanded.nodes[e.nj];
+    
+    // Position along primary element (0 to 1)
+    const position = idx / subElems.length;
+    
+    return {
+      index: idx,
+      position: position,
+      data: data,
+      ni: ni,
+      nj: nj
+    };
+  });
+  
+  // Get the mode to display
+  const mode = viewMode || el.stressViewSelector.value;
+  
+  let html = `<div class="stressLabel">Segment ${elemId}: Node ${elem.ni} → ${elem.nj}</div>`;
+  html += `<div class="stressValue" style="margin-bottom:10px;">${subElems.length} subsegments analyzed</div>`;
+  
+  if(mode === 'table'){
+    html += buildStressTable(stressData);
+  } else if(mode === 'moment'){
+    html += buildMomentDiagrams(stressData, elem);
+  } else if(mode === 'shear'){
+    html += buildShearDiagrams(stressData, elem);
+  } else if(mode === 'combined'){
+    html += buildCombinedStressDiagram(stressData, elem);
+  }
+  
+  el.stressContent.innerHTML = html;
+}
+
+/* =========================
+   UI wiring
+   ========================= */
+el.btnImportNodes.addEventListener('click', ()=> el.fileNodes.click());
+el.btnImportElems.addEventListener('click', ()=> el.fileElems.click());
+
+el.fileNodes.addEventListener('change', async ()=>{
+  const f = el.fileNodes.files?.[0];
+  if(!f) return;
+  logClear(); setStatus("Reading nodes...");
+  try{
+    el.taNodes.value = await f.text();
+    syncFromTextareas({nodes:true, elems:false, announce:true});
+    logLine(`OK: Loaded nodes file "${f.name}" into textarea.`, "log-ok");
+  }catch(err){ logLine(`ERROR: ${err.message}`, "log-err"); }
+  setStatus("Idle"); el.fileNodes.value="";
+});
+
+el.fileElems.addEventListener('change', async ()=>{
+  const f = el.fileElems.files?.[0];
+  if(!f) return;
+  logClear(); setStatus("Reading segments...");
+  try{
+    el.taElems.value = await f.text();
+    syncFromTextareas({nodes:false, elems:true, announce:true});
+    logLine(`OK: Loaded segments file "${f.name}" into textarea.`, "log-ok");
+  }catch(err){ logLine(`ERROR: ${err.message}`, "log-err"); }
+  setStatus("Idle"); el.fileElems.value="";
+});
+
+el.btnParseNodes.addEventListener('click', ()=>{
+  logClear(); setStatus("Syncing nodes...");
+  try{ syncFromTextareas({nodes:true, elems:false, announce:true}); }
+  catch(err){ logLine(`ERROR: ${err.message}`, "log-err"); }
+  setStatus("Idle");
+});
+el.btnParseElems.addEventListener('click', ()=>{
+  logClear(); setStatus("Syncing segments...");
+  try{ syncFromTextareas({nodes:false, elems:true, announce:true}); }
+  catch(err){ logLine(`ERROR: ${err.message}`, "log-err"); }
+  setStatus("Idle");
+});
+
+el.btnResetNodes.addEventListener('click', ()=>{
+  logClear();
+  el.taNodes.value = DEFAULT_NODES_TEXT;
+  try{
+    syncFromTextareas({nodes:true, elems:false, announce:false});
+    logLine("OK: Nodes reset to defaults and installed.", "log-ok");
+  }catch(err){
+    logLine(`ERROR resetting nodes: ${err.message}`, "log-err");
+  }
+  setStatus("Idle");
+});
+el.btnResetElems.addEventListener('click', ()=>{
+  logClear();
+  el.taElems.value = DEFAULT_ELEMS_TEXT;
+  try{
+    syncFromTextareas({nodes:false, elems:true, announce:false});
+    logLine("OK: Segments reset to defaults and installed.", "log-ok");
+  }catch(err){
+    logLine(`ERROR resetting segments: ${err.message}`, "log-err");
+  }
+  setStatus("Idle");
+});
+
+el.btnDraw.addEventListener('click', ()=>{
+  logClear(); setStatus("Syncing + validating...");
+  try{
+    syncFromTextareas({nodes:true, elems:true, announce:false});
+  }catch(err){
+    logLine(`ERROR: ${err.message}`, "log-err");
+    setStatus("Fix input");
+    return;
+  }
+
+  if(!crossValidate()){ setStatus("Fix input"); return; }
+
+  View.isInteractive = true;
+  fitView3D(Model.nodes);
+  Model.isDrawn = true;
+  drawPrimary();
+  setStatus("Interactive");
+  logLine("OK: Frame drawn in 3D viewport.", "log-ok");
+});
+
+el.btnSolve.addEventListener('click', ()=>{
+  logClear(); setStatus("Syncing + validating...");
+  try{
+    syncFromTextareas({nodes:true, elems:true, announce:false});
+  }catch(err){
+    logLine(`ERROR: ${err.message}`, "log-err");
+    setStatus("Fix input");
+    return;
+  }
+
+  if(!crossValidate()){ setStatus("Fix input"); return; }
+
+  try{
+    setStatus("Expanding mesh...");
+    const expanded = buildExpandedModel(10);
+
+    setStatus("Solving...");
+    const sol = solveStaticExpanded(expanded);
+// Optional: quick BC reaction sanity check (prints a few)
+const R = sol.R;
+let shown = 0;
+for(let d=0; d<sol.meta.ndof && shown<8; d++){
+  // show only prescribed DOFs (condensed-out)
+  const iNode = Math.floor(d/6);
+  const dofName = ['ux','uy','uz','rx','ry','rz'][d%6];
+  const bc = expanded.nodes[iNode].bc;
+  const isPrescribed =
+    (d%6===0 && bc.ux.prescribed) || (d%6===1 && bc.uy.prescribed) || (d%6===2 && bc.uz.prescribed) ||
+    (d%6===3 && bc.rx.prescribed) || (d%6===4 && bc.ry.prescribed) || (d%6===5 && bc.rz.prescribed);
+
+  if(isPrescribed){
+    logLine(`Reaction @ ${expanded.nodes[iNode].label}.${dofName} = ${R[d].toFixed(4)}`, "log-ok");
+    shown++;
+  }
+}
+
+    setStatus("Post-processing...");
+    const disp = summarizeDisplacements(expanded, sol.U);
+    const stress = summarizeStresses(expanded, sol.U);
+
+    
+
+Model.lastSolution = { expanded, U: sol.U, F: sol.F, K: sol.K, R: sol.R, meta: sol.meta, disp, stress };
+
+// after: Model.lastSolution = { expanded, U: sol.U, ... };
+
+Model.lastSolution.expandedDisp = expanded.nodes.map((n, i) => ({
+  ux: sol.U[6*i + 0],
+  uy: sol.U[6*i + 1],
+  uz: sol.U[6*i + 2]
+}));
+
+    el.defScale.disabled = false;
+    el.defScaleInput.disabled = false;
+    el.defScale.value = 0;
+    el.defScaleInput.value = 0;
+
+    logLine(`OK: Static solve complete. DOF ${sol.meta.ndof} (free ${sol.meta.nFree}, fixed ${sol.meta.nFixed}).`, "log-ok");
+    logLine(`Displacements (expanded): Max |u| = ${disp.maxMag.val.toFixed(4)} at ${disp.maxMag.label}`, "log-ok");
+    logLine(`Displacements (expanded): Min |u| = ${disp.minMag.val.toFixed(4)} at ${disp.minMag.label}`, "log-ok");
+    logLine(`Stresses: Max sigma = ${stress.maxSig.val.toFixed(2)} at ${stress.maxSig.at}`, "log-ok");
+    logLine(`Stresses: Min sigma = ${stress.minSig.val.toFixed(2)} at ${stress.minSig.at}`, "log-ok");
+
+    View.isInteractive = true;
+    fitView3D(Model.nodes);
+    Model.isDrawn = true;
+    drawPrimary();
+    setStatus("Solved (use deflection scale slider)");
+  }catch(err){
+    logLine(`ERROR: ${err.message}`, "log-err");
+    setStatus("Solve failed");
+  }
+});
+
+el.defScale.addEventListener('input', ()=>{
+  const val = Number(el.defScale.value);
+  el.defScaleInput.value = val;
+  if(Model.isDrawn) drawPrimary();
+});
+
+el.defScaleInput.addEventListener('input', ()=>{
+  const val = Number(el.defScaleInput.value);
+  const max = Number(el.defScale.max);
+  // Clamp to slider range
+  const clamped = Math.max(0, Math.min(max, val));
+  el.defScale.value = clamped;
+  el.defScaleInput.value = clamped;
+  if(Model.isDrawn) drawPrimary();
+});
+
+el.btnSetMaxScale.addEventListener('click', ()=>{
+  const newMax = Number(el.defScaleMaxInput.value);
+  if(!Number.isFinite(newMax) || newMax <= 0){
+    logLine("ERROR: Slider max must be a positive number", "log-err");
+    return;
+  }
+  el.defScale.max = newMax;
+  el.defScaleMax.textContent = newMax;
+  logLine(`OK: Deflection slider max set to ${newMax}`, "log-ok");
+});
+
+el.stressViewSelector.addEventListener('change', ()=>{
+  if(View.selectedSegmentForAnalysis !== null){
+    displayElementAnalysis(View.selectedSegmentForAnalysis);
+  }
+});
+
+el.btnExportJSON.addEventListener('click', ()=>{
+  try{
+    const obj = buildExportState();
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
+    downloadBlob(blob, `frame3d_model_${timestampForFilename()}.json`);
+    logLine("OK: Exported JSON.", "log-ok");
+  }catch(err){
+    logLine(`ERROR exporting JSON: ${err.message}`, "log-err");
+  }
+});
+
+el.btnImportJSON.addEventListener('click', ()=> el.fileImportJSON.click());
+
+el.fileImportJSON.addEventListener('change', async ()=>{
+  const f = el.fileImportJSON.files?.[0];
+  if(!f) return;
+  try{
+    const text = await f.text();
+    const obj = JSON.parse(text);
+    logClear(); setStatus("Importing JSON...");
+    applyImportedState(obj);
+  }catch(err){
+    logLine(`ERROR importing JSON: ${err.message}`, "log-err");
+    setStatus("Import failed");
+  }finally{
+    el.fileImportJSON.value = "";
+  }
+});
+
+el.btnExportCSV.addEventListener('click', ()=>{
+  try{
+    exportResultsCSV();
+    logLine("OK: Exported results CSV.", "log-ok");
+  }catch(err){
+    logLine(`ERROR exporting CSV: ${err.message}`, "log-err");
+  }
+});
+
+
+/* =========================
+   3D Camera Controls
+   ========================= */
+function canvasPointFromEvent(evt){
+  const r = el.canvas.getBoundingClientRect();
+  return {
+    x:(evt.clientX-r.left)*(el.canvas.width/r.width),
+    y:(evt.clientY-r.top)*(el.canvas.height/r.height)
+  };
+}
+
+function findNodeAtScreenPoint(sx, sy, tolerance = 10){
+  // Find which node (if any) is near the screen point
+  for(const n of Model.nodes){
+    const p = project3D(n.x, n.y, n.z);
+    const dist = Math.sqrt((p.x - sx)**2 + (p.y - sy)**2);
+    if(dist <= tolerance) return n;
+  }
+  return null;
+}
+
+function findElemAtScreenPoint(sx, sy, tolerance = 8){
+  // Find which element (if any) is near the screen point
+  // Check distance from point to line segment in screen space
+  for(const e of Model.elems){
+    const ni = Model.nodeById.get(e.ni);
+    const nj = Model.nodeById.get(e.nj);
+    if(!ni || !nj) continue;
+    
+    const p1 = project3D(ni.x, ni.y, ni.z);
+    const p2 = project3D(nj.x, nj.y, nj.z);
+    
+    // Vector from p1 to p2
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len2 = dx*dx + dy*dy;
+    
+    if(len2 < 1e-6) continue; // Skip zero-length segments
+    
+    // Parameter t of closest point on line segment
+    let t = ((sx - p1.x)*dx + (sy - p1.y)*dy) / len2;
+    t = Math.max(0, Math.min(1, t)); // Clamp to segment
+    
+    // Closest point on segment
+    const closestX = p1.x + t*dx;
+    const closestY = p1.y + t*dy;
+    
+    // Distance from mouse to closest point
+    const dist = Math.sqrt((sx - closestX)**2 + (sy - closestY)**2);
+    
+    if(dist <= tolerance) return e;
+  }
+  return null;
+}
+
+function formatBCTooltip(node){
+  // Format boundary condition tooltip with loads (+ displacements if solved)
+  const ux = node.ux.prescribed ? `Ux=${node.ux.value}` : "Ux=free";
+  const uy = node.uy.prescribed ? `Uy=${node.uy.value}` : "Uy=free";
+  const uz = node.uz.prescribed ? `Uz=${node.uz.value}` : "Uz=free";
+  const rx = node.rx.prescribed ? `Rx=${node.rx.value}` : "Rx=free";
+  const ry = node.ry.prescribed ? `Ry=${node.ry.value}` : "Ry=free";
+  const rz = node.rz.prescribed ? `Rz=${node.rz.value}` : "Rz=free";
+
+  let tooltip = `Node ${node.id}: ${ux}, ${uy}, ${uz}, ${rx}, ${ry}, ${rz}`;
+
+  // Add loads if any are non-zero
+  const fx = node.loads.fx || 0;
+  const fy = node.loads.fy || 0;
+  const fz = node.loads.fz || 0;
+  if(fx !== 0 || fy !== 0 || fz !== 0){
+    const loadParts = [];
+    if(fx !== 0) loadParts.push(`Fx=${fx}`);
+    if(fy !== 0) loadParts.push(`Fy=${fy}`);
+    if(fz !== 0) loadParts.push(`Fz=${fz}`);
+    tooltip += ` | Loads: ${loadParts.join(', ')}`;
+  }
+
+  // ✅ Add solved GLOBAL displacements (expanded model) if available
+  if(Model.lastSolution && Model.lastSolution.expanded && Model.lastSolution.expandedDisp){
+    // node.id is 1-based; expanded.nodes array is 0-based
+    const idx = (node.id|0) - 1;
+    const d = Model.lastSolution.expandedDisp[idx];
+    if(d){
+      tooltip += ` | u(global) = (${d.ux.toExponential(3)}, ${d.uy.toExponential(3)}, ${d.uz.toExponential(3)})`;
+    }
+  }
+
+  return tooltip;
+}
+
+
+function fmt3(v, nd=3){
+  return `(${v.x.toFixed(nd)}, ${v.y.toFixed(nd)}, ${v.z.toFixed(nd)})`;
+}
+
+
+function formatElemTooltip(elem){
+  const ni = Model.nodeById.get(elem.ni);
+  const nj = Model.nodeById.get(elem.nj);
+
+  let tooltip = `Segment ${elem.id}: Node ${elem.ni}→${elem.nj}`;
+  tooltip += ` | E=${elem.E.toExponential(2)}, G=${elem.G.toExponential(2)}`;
+  tooltip += ` | Izz=${elem.Izz}, Iyy=${elem.Iyy}, Jyz=${elem.Jyz}, Ayz=${elem.Ayz}`;
+  tooltip += ` | Orient: (${elem.x3}, ${elem.y3}, ${elem.z3})`;
+
+  // Length
+  if(ni && nj){
+    const dx = nj.x - ni.x;
+    const dy = nj.y - ni.y;
+    const dz = nj.z - ni.z;
+    const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    tooltip += ` | Length=${len.toFixed(2)}`;
+
+    // ---- Direction cosines (local axes in global components) ----
+    // Uses same basis as your transformation definition (orientation point)
+    const basis = localAxesFromElem(ni, nj, elem);
+    if(basis.ok){
+      tooltip += `\nLocal axes (global):`;
+      tooltip += `\n  x̂ = ${fmt3(basis.xhat)}`;
+      tooltip += `\n  ŷ = ${fmt3(basis.yhat)}`;
+      tooltip += `\n  ẑ = ${fmt3(basis.zhat)}`;
+    } else if(basis.xhat){
+      tooltip += `\nLocal axes (global):`;
+      tooltip += `\n  x̂ = ${fmt3(basis.xhat)}`;
+      tooltip += `\n  ŷ/ẑ undefined`;
+      tooltip += `\n  ⚠ ${basis.warn || "Orientation issue"}`;
+    }
+  }
+
+  return tooltip;
+}
+
+function updateTooltip(){
+  // Update the tooltip display based on pinned or hovered node/element
+  // Priority: pinned element > pinned node > hovered element > hovered node
+  
+  if(View.pinnedElem !== null){
+    const elem = Model.elemById.get(View.pinnedElem);
+    if(elem){
+      const tooltip = formatElemTooltip(elem);
+      el.selInfo.textContent = tooltip + " (pinned - click elsewhere to unpin)";
+      el.selInfo.style.color = "var(--text)";
+      return;
+    }
+  }
+  
+  if(View.pinnedNode !== null){
+    const node = Model.nodeById.get(View.pinnedNode);
+    if(node){
+      const tooltip = formatBCTooltip(node);
+      el.selInfo.textContent = tooltip + " (pinned - click elsewhere to unpin)";
+      el.selInfo.style.color = "var(--text)";
+      return;
+    }
+  }
+  
+  if(View.hoveredElem !== null){
+    const elem = Model.elemById.get(View.hoveredElem);
+    if(elem){
+      el.selInfo.textContent = formatElemTooltip(elem);
+      el.selInfo.style.color = "var(--text)";
+      return;
+    }
+  }
+  
+  if(View.hoveredNode !== null){
+    const node = Model.nodeById.get(View.hoveredNode);
+    if(node){
+      el.selInfo.textContent = formatBCTooltip(node);
+      el.selInfo.style.color = "var(--text)";
+      return;
+    }
+  }
+  
+  el.selInfo.textContent = "";
+}
+
+el.canvas.addEventListener('mousedown',(evt)=>{
+  if(!View.isInteractive) return;
+  evt.preventDefault();
+  
+  const p = canvasPointFromEvent(evt);
+  
+  // Check if clicking on a node or element (only for left click)
+  if(evt.button === 0){
+    // Nodes have priority over elements
+    const clickedNode = findNodeAtScreenPoint(p.x, p.y);
+    const clickedElem = clickedNode ? null : findElemAtScreenPoint(p.x, p.y);
+    
+    if(clickedNode){
+      // Toggle pin on this node
+      if(View.pinnedNode === clickedNode.id){
+        View.pinnedNode = null; // Unpin if already pinned
+      } else {
+        View.pinnedNode = clickedNode.id; // Pin this node
+        View.pinnedElem = null; // Unpin any element
+      }
+      updateTooltip();
+      if(Model.isDrawn) drawPrimary();
+      return; // Don't start drag if clicking a node
+    } else if(clickedElem){
+      // Toggle pin on this element
+      if(View.pinnedElem === clickedElem.id){
+        View.pinnedElem = null; // Unpin if already pinned
+      } else {
+        View.pinnedElem = clickedElem.id; // Pin this element
+        View.pinnedNode = null; // Unpin any node
+        // Display analysis for this element
+        View.selectedSegmentForAnalysis = clickedElem.id;
+        displayElementAnalysis(clickedElem.id);
+      }
+      updateTooltip();
+      if(Model.isDrawn) drawPrimary();
+      return; // Don't start drag if clicking an element
+    } else {
+      // Clicked empty space, unpin everything
+      if(View.pinnedNode !== null || View.pinnedElem !== null){
+        View.pinnedNode = null;
+        View.pinnedElem = null;
+        updateTooltip();
+        if(Model.isDrawn) drawPrimary();
+      }
+    }
+  }
+  
+  // Start drag operation
+  View.dragging = true;
+  View.dragButton = evt.button;
+  View.dragStart.x = p.x;
+  View.dragStart.y = p.y;
+  View.dragStart.azimuth = View.cam.azimuth;
+  View.dragStart.elevation = View.cam.elevation;
+  View.dragStart.centerX = View.cam.centerX;
+  View.dragStart.centerY = View.cam.centerY;
+  View.dragStart.centerZ = View.cam.centerZ;
+});
+
+window.addEventListener('mouseup',()=>{ View.dragging=false; });
+
+window.addEventListener('mousemove',(evt)=>{
+  if(!View.isInteractive) return;
+  
+  const p = canvasPointFromEvent(evt);
+  View.mousePos.x = p.x;
+  View.mousePos.y = p.y;
+  
+  if(View.dragging){
+    const dx = p.x - View.dragStart.x;
+    const dy = p.y - View.dragStart.y;
+
+    if(View.dragButton === 0){ // Left button - orbit
+      View.cam.azimuth = View.dragStart.azimuth + dx * 0.01;
+      View.cam.elevation = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, View.dragStart.elevation - dy * 0.01));
+    } else if(View.dragButton === 2){ // Right button - pan
+      const panSpeed = View.cam.distance * 0.002;
+      const right = {
+        x: Math.sin(View.cam.azimuth),
+        y: -Math.cos(View.cam.azimuth)
+      };
+      const up = {
+        x: Math.cos(View.cam.azimuth) * Math.sin(View.cam.elevation),
+        y: Math.sin(View.cam.azimuth) * Math.sin(View.cam.elevation),
+        z: Math.cos(View.cam.elevation)
+      };
+      
+      View.cam.centerX = View.dragStart.centerX - dx * panSpeed * right.x + dy * panSpeed * up.x;
+      View.cam.centerY = View.dragStart.centerY - dx * panSpeed * right.y + dy * panSpeed * up.y;
+      View.cam.centerZ = View.dragStart.centerZ + dy * panSpeed * up.z;
+    }
+    
+    if(Model.isDrawn) drawPrimary();
+  } else {
+    // Check for node hover when not dragging (nodes have priority over elements)
+    const hoveredNode = findNodeAtScreenPoint(p.x, p.y);
+    const hoveredElem = hoveredNode ? null : findElemAtScreenPoint(p.x, p.y);
+    
+    const newNodeID = hoveredNode ? hoveredNode.id : null;
+    const newElemID = hoveredElem ? hoveredElem.id : null;
+    
+    if(newNodeID !== View.hoveredNode || newElemID !== View.hoveredElem){
+      View.hoveredNode = newNodeID;
+      View.hoveredElem = newElemID;
+      updateTooltip();
+      if(Model.isDrawn) drawPrimary();
+    }
+  }
+});
+
+el.canvas.addEventListener('wheel',(evt)=>{
+  if(!View.isInteractive) return;
+  evt.preventDefault();
+  const zoomFactor = Math.exp(-evt.deltaY * 0.001);
+  View.cam.distance = Math.max(10, Math.min(10000, View.cam.distance * zoomFactor));
+  if(Model.isDrawn) drawPrimary();
+},{passive:false});
+
+el.canvas.addEventListener('contextmenu',(evt)=>{
+  evt.preventDefault(); // Prevent context menu on right-click
+});
+
+/* =========================
+   Startup
+   ========================= */
+function init(){
+  clearCanvas();
+  el.taNodes.value = DEFAULT_NODES_TEXT;
+  el.taElems.value = DEFAULT_ELEMS_TEXT;
+
+  logClear();
+  try{
+    syncFromTextareas({nodes:true, elems:true, announce:false});
+    el.btnExportCSV.disabled = true;
+logLine("Loaded defaults into model. Edit text and click Solve; changes take effect immediately.", "log-ok");
+  }catch(err){
+    logLine(`ERROR loading defaults: ${err.message}`, "log-err");
+  }
+  setStatus("Idle");
+}
+init();
 </script>
 </body>
 </html>
+
 
 
