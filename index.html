@@ -1011,11 +1011,9 @@ function assembleKM(){
 /* =========================
    Extract free DOFs and solve generalized eigenproblem
    ========================= */
-
 function solveFirst3Modes(){
   const {K, M, bcByDof, ndof} = assembleKM();
 
-  // Free DOFs
   const free = [];
   for(let i=0;i<ndof;i++){
     const v = bcByDof[i];
@@ -1023,87 +1021,49 @@ function solveFirst3Modes(){
   }
   if(free.length===0) throw new Error("All DOFs prescribed; no modal DOFs.");
 
-  // Build dense Kff and Mff
-  const n = free.length;
-  const Kff = Array.from({length:n}, ()=> Array(n).fill(0));
-  const Mff = Array.from({length:n}, ()=> Array(n).fill(0));
-  for(let a=0;a<n;a++){
+  const Kff = Array.from({length:free.length}, ()=> Array(free.length).fill(0));
+  const Mff = Array.from({length:free.length}, ()=> Array(free.length).fill(0));
+
+  for(let a=0;a<free.length;a++){
     const I = free[a];
-    for(let b=0;b<n;b++){
+    for(let b=0;b<free.length;b++){
       const J = free[b];
       Kff[a][b] = K[I][J];
       Mff[a][b] = M[I][J];
     }
   }
 
-  // --- Robust generalized eigen solve using Cholesky:
-  // Mff = L L^T (SPD). Then B = L^{-1} Kff L^{-T} is symmetric.
-  // Solve B y = λ y, then x = L^{-T} y
-  let L;
-  try{
-    L = numeric.cholesky(Mff);
-  }catch(_){
-    throw new Error(
-      "Mass matrix Mff is not SPD (singular/ill-conditioned). " +
-      "Check: missing mass density rho/A, zero-length elements, or over-constrained DOFs."
-    );
-  }
+  const Minv = numeric.inv(Mff);
+  const A = numeric.dot(Minv, Kff);
 
-  // Linv = inv(L)
-  const Linv = numeric.inv(L);
+  const eig = numeric.eig(A);
+  const lam = eig.lambda.x;
+  const V = eig.E.x;
 
-  // B = Linv * Kff * Linv^T
-  const LinvT = numeric.transpose(Linv);
-  const B = numeric.dot(numeric.dot(Linv, Kff), LinvT);
-
-  // Force symmetry (numerical cleanup)
-  for(let i=0;i<n;i++){
-    for(let j=i+1;j<n;j++){
-      const s = 0.5*(B[i][j] + B[j][i]);
-      B[i][j]=s; B[j][i]=s;
-    }
-  }
-
-  const eig = numeric.eig(B);
-  const lam = eig.lambda.x;     // should be real
-  const Y   = eig.E.x;          // eigenvectors as columns (numeric.js)
-
-  // Collect positive modes
   const modes = [];
   for(let i=0;i<lam.length;i++){
     const li = lam[i];
     if(!Number.isFinite(li) || li<=1e-10) continue;
-    const yi = Y.map(row => row[i]); // y (length n)
-    modes.push({lambda: li, y: yi});
+    modes.push({lambda: li, vec: V.map(row => row[i])});
   }
-  if(modes.length===0){
-    throw new Error("No positive eigenvalues found. Check constraints and mass properties.");
-  }
+  if(modes.length===0) throw new Error("No positive eigenvalues found (check constraints/mass).");
 
-  // Sort ascending lambda
   modes.sort((a,b)=>a.lambda-b.lambda);
 
-  // Take first 3
   const take = modes.slice(0,3);
 
-  // Recover x = L^{-T} y
   const fullModes = [];
   const freqHz = [];
-
   for(const m of take){
     const omega = Math.sqrt(m.lambda);
-    freqHz.push(omega/(2*Math.PI));
+    const f = omega/(2*Math.PI);
+    freqHz.push(f);
 
-    // x = Linv^T * y
-    const x = numeric.dot(LinvT, m.y); // length n
-
-    // full ndof vector
     const U = new Float64Array(ndof);
-    for(let k=0;k<n;k++){
-      U[free[k]] = x[k];
+    for(let k=0;k<free.length;k++){
+      U[free[k]] = m.vec[k];
     }
 
-    // Normalize by max translational magnitude = 1
     let maxT = 0;
     for(let i=0;i<ndof/6;i++){
       const ux=U[6*i+0], uy=U[6*i+1], uz=U[6*i+2];
@@ -1115,7 +1075,7 @@ function solveFirst3Modes(){
     fullModes.push(U);
   }
 
-  return {freqHz, modes: fullModes, meta:{ndof, nFree:n, free} };
+  return {freqHz, modes: fullModes, meta:{ndof, nFree: free.length, free} };
 }
 
 /* =========================
@@ -1228,9 +1188,6 @@ el.btnSolveModes.addEventListener('click', ()=>{
   logClear(); setStatus("Validating...");
   try{ syncFromTextareas(); }catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); setStatus("Fix input"); return; }
   if(!crossValidate()){ setStatus("Fix input"); return; }
-
-
-
 
   try{
     setStatus("Assembling & solving modes...");
@@ -1453,8 +1410,7 @@ try{ syncFromTextareas(); } catch(_){}
 renderSummary();
 updateButtons();
 </script>
-</body>
-</html>
+
 
 
 
