@@ -469,24 +469,39 @@ function parseElems(text){
 /* =========================
    Install / validate
    ========================= */
-function installNodes(nodes){
+
+function installNodes(nodes, opts={ resetView:true }){
+  const { resetView=true } = opts;
+
   Model.nodes = nodes;
   Model.nodeById = new Map(nodes.map(n=>[n.id,n]));
-  Model.isDrawn = false;
-  Model.lastModes = null;
-  View.hoveredNode = View.pinnedNode = null;
-  View.hoveredElem = View.pinnedElem = null;
+  // nodeIndexById is rebuilt in buildBcByDof() during assembly
+
+  if(resetView){
+    Model.isDrawn = false;
+    Model.lastModes = null;
+    View.hoveredNode = View.pinnedNode = null;
+    View.hoveredElem = View.pinnedElem = null;
+  }
   renderSummary();
 }
-function installElems(elems){
+
+function installElems(elems, opts={ resetView:true }){
+  const { resetView=true } = opts;
+
   Model.elems = elems;
   Model.elemById = new Map(elems.map(e=>[e.id,e]));
-  Model.isDrawn = false;
-  Model.lastModes = null;
-  View.hoveredNode = View.pinnedNode = null;
-  View.hoveredElem = View.pinnedElem = null;
+
+  if(resetView){
+    Model.isDrawn = false;
+    Model.lastModes = null;
+    View.hoveredNode = View.pinnedNode = null;
+    View.hoveredElem = View.pinnedElem = null;
+  }
   renderSummary();
 }
+
+
 function crossValidate(){
   let ok = true;
   for(const e of Model.elems){
@@ -1133,11 +1148,13 @@ function showElemInfo(e){
 /* =========================
    UI wiring
    ========================= */
-function syncFromTextareas(){
+
+
+function syncFromTextareas(resetView=true){
   const nodes = parseNodes(el.taNodes.value||"");
   const elems = parseElems(el.taElems.value||"");
-  installNodes(nodes);
-  installElems(elems);
+  installNodes(nodes, { resetView });
+  installElems(elems, { resetView });
   updateButtons();
 }
 
@@ -1186,7 +1203,8 @@ el.btnDraw.addEventListener('click', ()=>{
 
 el.btnSolveModes.addEventListener('click', ()=>{
   logClear(); setStatus("Validating...");
-  try{ syncFromTextareas(); }catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); setStatus("Fix input"); return; }
+  try{ syncFromTextareas(false); } // << preserve Model.isDrawn + pins
+  catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); setStatus("Fix input"); return; }
   if(!crossValidate()){ setStatus("Fix input"); return; }
 
   try{
@@ -1204,15 +1222,19 @@ el.btnSolveModes.addEventListener('click', ()=>{
     el.amp.disabled=false;
     el.speed.disabled=false;
 
+    // Ensure we are drawable/clickable even if user never pressed Draw
+    View.isInteractive = true;
+    Model.isDrawn = true;
+
     renderSummary();
     setStatus("Solved (select mode / animate)");
-
     requestRedraw();
   }catch(e){
     logLine(`ERROR: ${e.message}`, "log-err");
     setStatus("Solve failed");
   }
 });
+
 
 /* =========================
    Animation
@@ -1410,6 +1432,7 @@ try{ syncFromTextareas(); } catch(_){}
 renderSummary();
 updateButtons();
 </script>
+
 
 
 
