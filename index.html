@@ -2955,7 +2955,12 @@ for(let d=0; d<sol.meta.ndof && shown<8; d++){
 
     
 
+
 Model.lastSolution = { expanded, U: sol.U, F: sol.F, K: sol.K, R: sol.R, meta: sol.meta, disp, stress };
+
+// enable CSV export now that we have results
+el.btnExportCSV.disabled = false;
+
 
 // after: Model.lastSolution = { expanded, U: sol.U, ... };
 
@@ -3382,6 +3387,7 @@ init();
 </script>
 </body>
 </html>
+
 
 
 
