@@ -63,6 +63,16 @@
   <div id="ui">
     <h3>Modal Frame Definition</h3>
 
+<div class="row" style="margin:6px 0 10px;">
+  <button id="btnExportJSON">Export JSON</button>
+  <button id="btnImportJSON">Import JSON</button>
+</div>
+<button id="btnExportCSV" style="margin-bottom:10px;">Export CSV</button>
+
+<!-- hidden file input for Import JSON -->
+<input id="fileImportJSON" type="file" accept=".json,application/json" style="display:none" />
+
+
     <div class="sectionTitle">Units / Gravity</div>
     <div class="row">
       <select id="units">
@@ -225,6 +235,11 @@ const el = {
   selInfo: document.getElementById('selInfo'),
 };
 const ctx = el.canvas.getContext('2d');
+
+el.btnExportJSON = document.getElementById('btnExportJSON');
+el.btnImportJSON = document.getElementById('btnImportJSON');
+el.btnExportCSV  = document.getElementById('btnExportCSV');
+el.fileImportJSON = document.getElementById('fileImportJSON');
 
 /* =========================
    Gravity
@@ -465,6 +480,91 @@ function parseElems(text){
   }
   return elems;
 }
+
+function downloadText(filename, text, mime="text/plain"){
+  const blob = new Blob([text], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function nodesToTSV(nodes){
+  const header = "node\tx\ty\tz\tdelX\tdelY\tdelZ\tthetaXX\tthetaYY\tthetaZZ\tW";
+  const rows = nodes
+    .slice()
+    .sort((a,b)=>a.id-b.id)
+    .map(n=>{
+      const dx = n.ux?.prescribed ? n.ux.value : "";
+      const dy = n.uy?.prescribed ? n.uy.value : "";
+      const dz = n.uz?.prescribed ? n.uz.value : "";
+      const rx = n.rx?.prescribed ? n.rx.value : "";
+      const ry = n.ry?.prescribed ? n.ry.value : "";
+      const rz = n.rz?.prescribed ? n.rz.value : "";
+      const W  = (n.W ?? 0);
+      return [n.id,n.x,n.y,n.z,dx,dy,dz,rx,ry,rz,W].join("\t");
+    });
+  return header + "\n" + rows.join("\n");
+}
+
+function elemsToTSV(elems){
+  const header = "elem\tni\tnj\tE\tG\tIzz\tIyy\tJyz\tAyz\trho\tx3\ty3\tz3";
+  const rows = elems
+    .slice()
+    .sort((a,b)=>a.id-b.id)
+    .map(e=>[e.id,e.ni,e.nj,e.E,e.G,e.Izz,e.Iyy,e.Jyz,e.Ayz,(e.rho??0),e.x3,e.y3,e.z3].join("\t"));
+  return header + "\n" + rows.join("\n");
+}
+
+// Get "current state" from textareas (so export reflects edits even if user forgot Use Nodes/Use Segments)
+function snapshotFromTextareas(){
+  const nodes = parseNodes(el.taNodes.value||"");
+  const elems = parseElems(el.taElems.value||"");
+  const units = el.units.value;
+  const g = getGravity();
+  return { units, g, nodes, elems };
+}
+
+function stateToCSV(state){
+  // single CSV file with two sections (common “one file” approach)
+  const nodesHeader = "node,x,y,z,delX,delY,delZ,thetaXX,thetaYY,thetaZZ,W";
+  const nodeRows = state.nodes
+    .slice().sort((a,b)=>a.id-b.id)
+    .map(n=>{
+      const dx = n.ux?.prescribed ? n.ux.value : "";
+      const dy = n.uy?.prescribed ? n.uy.value : "";
+      const dz = n.uz?.prescribed ? n.uz.value : "";
+      const rx = n.rx?.prescribed ? n.rx.value : "";
+      const ry = n.ry?.prescribed ? n.ry.value : "";
+      const rz = n.rz?.prescribed ? n.rz.value : "";
+      const W  = (n.W ?? 0);
+      return [n.id,n.x,n.y,n.z,dx,dy,dz,rx,ry,rz,W].join(",");
+    });
+
+  const elemsHeader = "elem,ni,nj,E,G,Izz,Iyy,Jyz,Ayz,rho,x3,y3,z3";
+  const elemRows = state.elems
+    .slice().sort((a,b)=>a.id-b.id)
+    .map(e=>[e.id,e.ni,e.nj,e.E,e.G,e.Izz,e.Iyy,e.Jyz,e.Ayz,(e.rho??0),e.x3,e.y3,e.z3].join(","));
+
+  return [
+    `# 3D Frame Modal Model Export`,
+    `# units=${state.units}, g=${state.g}`,
+    ``,
+    `NODES`,
+    nodesHeader,
+    ...nodeRows,
+    ``,
+    `SEGMENTS`,
+    elemsHeader,
+    ...elemRows,
+    ``
+  ].join("\n");
+}
+
 
 /* =========================
    Install / validate
@@ -1235,6 +1335,86 @@ el.btnSolveModes.addEventListener('click', ()=>{
   }
 });
 
+el.btnExportJSON.addEventListener("click", ()=>{
+  logClear();
+  try{
+    const state = snapshotFromTextareas();
+    const payload = {
+      app: "3D Frame Modal Analysis (Modes 1–3)",
+      version: "json-v1",
+      exportedAt: new Date().toISOString(),
+      units: state.units,
+      g: state.g,
+      nodes: state.nodes,
+      elems: state.elems
+    };
+    downloadText("frame_modal_model.json", JSON.stringify(payload, null, 2), "application/json");
+    logLine("OK: Exported JSON.", "log-ok");
+  }catch(e){
+    logLine(`ERROR: Export JSON failed: ${e.message}`, "log-err");
+  }
+});
+
+el.btnExportCSV.addEventListener("click", ()=>{
+  logClear();
+  try{
+    const state = snapshotFromTextareas();
+    const csv = stateToCSV(state);
+    downloadText("frame_modal_model.csv", csv, "text/csv");
+    logLine("OK: Exported CSV.", "log-ok");
+  }catch(e){
+    logLine(`ERROR: Export CSV failed: ${e.message}`, "log-err");
+  }
+});
+
+el.btnImportJSON.addEventListener("click", ()=>{
+  el.fileImportJSON.value = "";
+  el.fileImportJSON.click();
+});
+
+el.fileImportJSON.addEventListener("change", ()=>{
+  const f = el.fileImportJSON.files && el.fileImportJSON.files[0];
+  if(!f) return;
+
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    logClear();
+    try{
+      const obj = JSON.parse(String(reader.result||"{}"));
+
+      // Minimal validation
+      if(!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.elems)){
+        throw new Error("JSON must contain arrays: nodes, elems.");
+      }
+
+      // Set units/g if present
+      if(obj.units === "metric" || obj.units === "imperial"){
+        el.units.value = obj.units;
+      }
+      if(Number.isFinite(Number(obj.g)) && Number(obj.g) > 0){
+        el.gInput.value = Number(obj.g);
+      }
+
+      // Populate textareas (TSV with header)
+      el.taNodes.value = nodesToTSV(obj.nodes);
+      el.taElems.value = elemsToTSV(obj.elems);
+
+      // Reinstall model + refresh buttons/summary
+      syncFromTextareas();
+
+      // Keep view interactive state as-is; but redraw if already drawn
+      if(Model.isDrawn) requestRedraw();
+
+      logLine("OK: Imported JSON into Nodes/Segments.", "log-ok");
+      setStatus("Idle");
+    }catch(e){
+      logLine(`ERROR: Import JSON failed: ${e.message}`, "log-err");
+      setStatus("Import failed");
+    }
+  };
+  reader.readAsText(f);
+});
+
 
 /* =========================
    Animation
@@ -1432,6 +1612,7 @@ try{ syncFromTextareas(); } catch(_){}
 renderSummary();
 updateButtons();
 </script>
+
 
 
 
