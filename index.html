@@ -3,1615 +3,1929 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>3D Frame Modal Analysis (Modes 1–3)</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+<title>Bolted Joint Module — Skeleton (UI + Scaled Drawing)</title>
 <style>
   :root{
     --bg:#ffffff;
     --panel:#f5f6f8;
-    --panel2:#ffffff;
+    --card:#ffffff;
     --line:#d7dbe3;
     --text:#111827;
     --muted:#5b6472;
     --accent:#2563eb;
+    --ok:#166534;
     --warn:#b45309;
     --err:#b91c1c;
-    --ok:#166534;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
-  html,body{height:100%; margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text);}
-  #app{height:100%; display:grid; grid-template-columns: 390px 1fr; grid-template-rows: 1fr; gap:10px; padding:10px; box-sizing:border-box;}
-  #ui{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px; box-sizing:border-box; overflow-y:auto;}
-  #rightColumn{display:flex; flex-direction:column; gap:10px; min-width:0;}
-  #viewportWrap{flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; min-height:400px;}
-  #canvas{width:100%; height:100%; background:#ffffff; border:1px solid var(--line); border-radius:8px; display:block;}
-  h3{margin:0 0 8px 0; font-size:14px; font-weight:700;}
-  .sectionTitle{font-size:12px; font-weight:700; margin:10px 0 6px; color:#1f2937;}
-  button{width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cfd6e2; background:#ffffff; color:var(--text); font-weight:700; cursor:pointer;}
-  button:hover{border-color:#b9c3d6;}
-  button:disabled{opacity:0.55; cursor:not-allowed;}
-  textarea{width:100%; box-sizing:border-box; min-height:84px; max-height:180px; resize:vertical; padding:8px; border-radius:8px; border:1px solid #cfd6e2; background:#ffffff; color:var(--text);
-           font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.2;}
-  .hint{font-size:12px; color:var(--muted); line-height:1.25; margin:8px 0;}
+  html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text);}
+  #app{height:100%; display:grid; grid-template-columns: 420px 1fr; gap:0; }
+  #left{background:var(--panel); border-right:1px solid var(--line); padding:14px 14px 16px; overflow:auto;}
+  #right{background:#fff; padding:14px; overflow:auto;}
+  h1{font-size:16px; margin:0 0 10px;}
+  .sub{color:var(--muted); font-size:12px; margin:0 0 12px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0;}
+  .card h2{font-size:13px; margin:0 0 10px; color:#0b1220;}
+  .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin:8px 0;}
+  .row3{display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin:8px 0;}
+  label{font-size:12px; color:var(--muted); display:block; margin:0 0 4px;}
+  input, select{
+    width:100%; box-sizing:border-box;
+    border:1px solid var(--line); border-radius:10px;
+    padding:8px 10px; font-size:13px; background:#fff; color:var(--text);
+  }
+  input[type="checkbox"]{width:auto;}
+  .inline{display:flex; align-items:center; gap:8px;}
+  .btnbar{display:flex; gap:10px; flex-wrap:wrap;}
+  button{
+    border:1px solid var(--line); background:#fff; color:var(--text);
+    border-radius:10px; padding:9px 12px; font-size:13px; cursor:pointer;
+  }
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  button:active{transform:translateY(1px);}
   .small{font-size:12px; color:var(--muted);}
-  .badge{display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #cfd6e2; background:#ffffff; font-size:12px; color:var(--muted);}
-  #summary{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
-  #log{margin-top:10px; padding:8px; background:#ffffff; border:1px solid var(--line); border-radius:8px; height:220px; overflow:auto; font-size:12px; line-height:1.25; white-space:pre-wrap;}
-  .log-warn{color:var(--warn);} .log-err{color:var(--err);} .log-ok{color:var(--ok);}
-  #vpBar{display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted); padding:0 2px;}
-  #selInfo{
-    font-size:11px; color:var(--text);
-    min-height:16px; padding:6px 8px;
-    background:rgba(255,255,255,0.92);
-    border-radius:6px; font-weight:500;
-    line-height:1.35;
-    white-space:pre-wrap;
-    border:1px solid rgba(215,219,227,0.9);
+  .table{
+    width:100%; border-collapse:collapse; font-size:12px;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden;
   }
-
-  .row{display:flex; gap:8px;}
-  .row > *{flex:1;}
-  select,input[type="number"]{
-    width:100%; box-sizing:border-box; padding:6px 8px; border-radius:8px; border:1px solid #cfd6e2; background:#fff; font-size:12px;
-  }
-  .kv{display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted); align-items:center;}
-  input[type="range"]{width:100%;}
+  .table th,.table td{border-bottom:1px solid var(--line); padding:7px 8px; text-align:left;}
+  .table th{background:#f9fafb; color:#111827; font-weight:600;}
+  .table tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted);}
+  .status-ok{color:var(--ok); border-color:#b7e0c3; background:#f2fbf5;}
+  .status-warn{color:var(--warn); border-color:#f1d6a8; background:#fffbf2;}
+  .status-err{color:var(--err); border-color:#f0b4b4; background:#fff5f5;}
+  #canvasWrap{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px; }
+  canvas{width:100%; height:420px; display:block;}
+  .muted{color:var(--muted);}
+  .rightGrid{display:grid; grid-template-columns: 1fr; gap:12px;}
+  .note{font-size:12px; color:var(--muted); line-height:1.35;}
 </style>
 </head>
-
 <body>
 <div id="app">
-  <div id="ui">
-    <h3>Modal Frame Definition</h3>
+  <!-- LEFT PANEL -->
+  <div id="left">
+    <h1>Bolted Joint — Preload Sizing (Skeleton)</h1>
+    <p class="sub">Single-file UI + scaled joint drawing + data model + calculation pipeline.</p>
 
-<div class="row" style="margin:6px 0 10px;">
+    <div class="card">
+      <h2>Units & Standard</h2>
+      <div class="row">
+        <div>
+          <div class="inline">
+            <input id="isImperial" type="checkbox" checked />
+            <label for="isImperial" style="margin:0;">Imperial (in, lbf)</label>
+          </div>
+          <div class="small">Unchecked = Metric (mm, N)</div>
+        </div>
+        <div>
+          <label>Standard Family</label>
+          <select id="boltFamily"></select>
+        </div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>Thread Series</label>
+          <select id="threadSeries">
+            <option value="coarse">Coarse</option>
+            <option value="fine">Fine</option>
+          </select>
+        </div>
+        <div>
+          <label>Grade / Class</label>
+          <select id="boltGrade"></select>
+        </div>
+        <div>
+          <label>Bolt Size</label>
+          <select id="boltSize"></select>
+        </div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>Bolt Material E (auto from family; override)</label>
+          <input id="boltE" type="number" step="any" />
+        </div>
+        <div>
+          <label>Thread Compliance Factor η (0.80–1.00)</label>
+          <input id="etaThread" type="number" step="0.01" value="0.90" min="0.80" max="1.00" />
+        </div>
+        <div>
+          <label>Frustum Half-Angle (deg)</label>
+          <input id="frustumAngle" type="number" step="any" value="30" />
+        </div>
+      </div>
+
+      <div class="note">
+        Washer bearing diameter rule: <b>if washer used → OD</b>. If no washer → bolt head / nut bearing diameter (from table placeholders).
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Geometry Stack</h2>
+
+      <div class="row3">
+        <div>
+          <label>Head Washer Used?</label>
+          <select id="useHeadWasher">
+            <option value="yes" selected>Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div>
+          <label>Head Washer Thickness</label>
+          <input id="tHeadWasher" type="number" step="any" value="0.06" />
+        </div>
+        <div>
+          <label>Head Washer OD</label>
+          <input id="odHeadWasher" type="number" step="any" value="1.00" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Head Washer Material</label>
+          <select id="matHeadWasher"></select>
+        </div>
+        <div>
+          <label>Clamped Members (1–5)</label>
+          <select id="numMembers">
+            <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="membersArea"></div>
+
+      <div class="row3">
+        <div>
+          <label>Nut Washer Used?</label>
+          <select id="useNutWasher">
+            <option value="yes" selected>Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div>
+          <label>Nut Washer Thickness</label>
+          <input id="tNutWasher" type="number" step="any" value="0.06" />
+        </div>
+        <div>
+          <label>Nut Washer OD</label>
+          <input id="odNutWasher" type="number" step="any" value="1.00" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Nut Washer Material</label>
+          <select id="matNutWasher"></select>
+        </div>
+        <div>
+          <label>Bolt Shank Length (smooth, within grip)</label>
+          <input id="Lshank" type="number" step="any" value="0.75" />
+        </div>
+      </div>
+
+      <div class="small muted">
+        Threaded length in grip is derived: <span class="pill">L_thread = L_grip − L_shank_in_grip</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Loads & Tightening Scatter</h2>
+
+      <div class="row3">
+        <div>
+          <label>External Load P</label>
+          <input id="Pext" type="number" step="any" value="2000" />
+        </div>
+        <div>
+          <label>Target Torque T</label>
+          <input id="Ttarget" type="number" step="any" value="120" />
+        </div>
+        <div>
+          <label>Torque Applied At</label>
+          <select id="torqueAt">
+            <option value="nut" selected>Nut</option>
+            <option value="head">Head</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>Torque Tolerance (±%)</label>
+          <input id="Ttol" type="number" step="any" value="10" />
+        </div>
+        <div>
+          <label>μ_thread (min)</label>
+          <input id="muTmin" type="number" step="any" value="0.12" />
+        </div>
+        <div>
+          <label>μ_thread (max)</label>
+          <input id="muTmax" type="number" step="any" value="0.20" />
+        </div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>μ_bearing (min)</label>
+          <input id="muBmin" type="number" step="any" value="0.12" />
+        </div>
+        <div></div><div></div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>μ_bearing (max)</label>
+          <input id="muBmax" type="number" step="any" value="0.20" />
+        </div>
+        <div></div><div></div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>Hole Fit (table-based)</label>
+          <select id="holeFit">
+            <option value="close">Close</option>
+            <option value="normal" selected>Normal</option>
+            <option value="loose">Loose</option>
+            <option value="custom">Custom (override)</option>
+          </select>
+        </div>
+        <div>
+          <label>Clearance Hole Dia (override)</label>
+          <input id="holeDia" type="number" step="any" placeholder="used only if Hole Fit = Custom" />
+        </div>
+        <div>
+          <label>Proof Utilization Limit</label>
+          <input id="proofLimit" type="number" step="any" value="1.00" />
+        </div>
+      </div>
+
+      <div class="btnbar" style="margin-top:10px;">
+        <button class="primary" id="btnScan">Minimum Size Scan</button>
+        <button id="btnSolve">Solve / Check Current Size</button>
+        <button id="btnRedraw">Redraw Only</button>
+        <button id="btnReset">Reset Defaults</button>
+      </div>
+
+<div class="btnbar" style="margin-top:10px;">
   <button id="btnExportJSON">Export JSON</button>
   <button id="btnImportJSON">Import JSON</button>
+  <button id="btnExportCSV">Export CSV</button>
 </div>
-<button id="btnExportCSV" style="margin-bottom:10px;">Export CSV</button>
-
-<!-- hidden file input for Import JSON -->
-<input id="fileImportJSON" type="file" accept=".json,application/json" style="display:none" />
 
 
-    <div class="sectionTitle">Units / Gravity</div>
-    <div class="row">
-      <select id="units">
-        <option value="imperial" selected>Imperial (in, lbf, slug/in³)</option>
-        <option value="metric">Metric (m, N, kg/m³)</option>
-      </select>
-      <input id="gInput" type="number" step="0.0001" value="386.0886" title="gravity" />
-    </div>
-    <div class="hint small">
-      For imperial, set g=386.0886 in/s². For metric, set g=9.80665 m/s². (You can override.)
-    </div>
 
-    <div class="sectionTitle">Nodes</div>
-    <div class="hint small">
-      Columns: <b>node x y z delX delY delZ thetaXX thetaYY thetaZZ W</b><br/>
-      BC rule: blank =&gt; free DOF, nonblank (including 0) =&gt; prescribed.<br/>
-      W is nodal <b>weight</b> (force). It is converted to mass m=W/g and added to ux,uy,uz.
-    </div>
-    <textarea id="taNodes" placeholder="node  x  y  z  delX  delY  delZ  thetaXX  thetaYY  thetaZZ  W"></textarea>
-    <div class="row">
-      <button id="btnUseNodes">Use Nodes</button>
-      <button id="btnResetNodes">Reset</button>
-    </div>
 
-    <div class="sectionTitle">Segments</div>
-    <div class="hint small">
-      Columns: <b>elem ni nj E G Izz Iyy Jyz Ayz rho x3 y3 z3</b> (header optional)<br/>
-      rho is <b>mass density</b>. Ayz is treated as area A.
+      <div class="small muted" style="margin-top:6px;">
+        Clearance hole is now taken from Close/Normal/Loose tables (metric & inch). Custom overrides the table.
+      </div>
     </div>
-    <textarea id="taElems" placeholder="elem  ni  nj  E  G  Izz  Iyy  Jyz  Ayz  rho  x3  y3  z3"></textarea>
-    <div class="row">
-      <button id="btnUseElems">Use Segments</button>
-      <button id="btnResetElems">Reset</button>
-    </div>
-
-    <div class="sectionTitle">Actions</div>
-    <button id="btnDraw" disabled>Draw Frame</button>
-    <button id="btnSolveModes" disabled>Solve Modes (First 3)</button>
-
-    <div class="sectionTitle">Mode Viewer</div>
-    <div class="row">
-      <select id="modeSelect" disabled>
-        <option value="0">Mode 1</option>
-        <option value="1">Mode 2</option>
-        <option value="2">Mode 3</option>
-      </select>
-      <button id="btnToggleAnim" disabled>Animate: Off</button>
-    </div>
-
-    <div class="kv" style="margin-top:8px;">
-      <div>Amplitude</div>
-      <input id="amp" type="number" step="0.1" value="10" disabled />
-    </div>
-    <div class="kv" style="margin-top:8px;">
-      <div>Speed (×)</div>
-      <input id="speed" type="number" step="0.1" value="1.0" disabled />
-    </div>
-
-    <div id="summary"></div>
-    <div id="log"></div>
   </div>
 
-  <div id="rightColumn">
-    <div id="viewportWrap">
-      <div id="vpBar">
-        <div>3D Viewport</div>
-        <div id="status" class="small">Idle</div>
+  <!-- RIGHT PANEL -->
+  <div id="right">
+    <div class="rightGrid">
+      <div id="canvasWrap">
+        <div class="inline" style="justify-content:space-between; margin-bottom:8px;">
+          <div class="inline" style="gap:10px;">
+            <span class="pill" id="unitsPill">Imperial</span>
+            <span class="pill" id="familyPill">SAE J429</span>
+            <span class="pill" id="sizePill">1/2-13</span>
+          </div>
+          <span class="pill" id="statusPill">Ready</span>
+        </div>
+        <canvas id="jointCanvas" width="1200" height="520"></canvas>
+        <div class="note" style="margin-top:8px;">
+          Drawing is to scale based on your inputs (stack thicknesses & bearing diameters). Threads are shown extending into the members and through the nut (Shigley-style schematic).
+        </div>
       </div>
-      <canvas id="canvas"></canvas>
-      <div id="selInfo"></div>
+
+      <div class="card">
+        <h2>Computed Summary</h2>
+        <table class="table" id="summaryTable">
+          <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
     </div>
   </div>
 </div>
 
 <script>
-/* =========================
-   Defaults
-   ========================= */
-const DEFAULT_NODES_TEXT =
-`node\tx\ty\tz\tdelX\tdelY\tdelZ\tthetaXX\tthetaYY\tthetaZZ\tW
-1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0
-2\t0\t0\t96\t\t\t\t\t\t\t0
-3\t60\t0\t0\t0\t0\t0\t0\t0\t0\t0
-4\t60\t0\t96\t\t\t\t\t\t\t0
-5\t0\t72\t0\t0\t0\t0\t\t\t\t0
-6\t0\t72\t96\t\t\t\t\t\t\t500
-7\t60\t72\t0\t0\t0\t0\t\t\t\t0
-8\t60\t72\t96\t\t\t\t\t\t\t0`;
+/* ============================================================
+   Placeholder data tables (expand later)
+   ============================================================ */
 
-const DEFAULT_ELEMS_TEXT =
-`elem\tni\tnj\tE\tG\tIzz\tIyy\tJyz\tAyz\trho\tx3\ty3\tz3
-1\t1\t2\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t60\t0\t0
-2\t3\t4\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t0\t0\t0
-3\t5\t6\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t60\t72\t0
-4\t7\t8\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t0\t72\t0
-5\t4\t8\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t1\t1\t96
-6\t2\t4\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t1\t1\t96
-7\t2\t6\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t1\t1\t96
-8\t6\t8\t12000000\t4610000\t10.7\t2.67\t7.3\t8\t0.03\t1\t1\t96`;
+const MATERIALS = [
+  { key:"steel",      name:"Steel",            E_imp: 30e6, E_met: 200000 },
+  { key:"stainless",  name:"Stainless Steel",  E_imp: 28e6, E_met: 193000 },
+  { key:"aluminum",   name:"Aluminum",         E_imp: 10e6, E_met:  69000 },
+  { key:"gasket",     name:"Gasket (input k)", E_imp: null, E_met: null, needsK:true },
+  { key:"oring",      name:"O-ring (input k)", E_imp: null, E_met: null, needsK:true },
+  { key:"general",    name:"General (input E)",E_imp: null, E_met: null, needsE:true }
+];
 
-/* =========================
-   Model
-   ========================= */
-const Model = {
-  nodes: [],
-  elems: [],
-  nodeById: new Map(),
-  elemById: new Map(),
-  nodeIndexById: new Map(),
-  isDrawn: false,
-  lastModes: null // {freqHz:[...], modes:[Float64Array ndof], meta:{...}}
+const BOLT_FAMILIES = {
+  imperial: [
+    { key:"sae_j429", name:"SAE J429" },
+    { key:"astm",     name:"ASTM (placeholder)" }
+  ],
+  metric: [
+    { key:"iso_metric", name:"ISO Metric" }
+  ]
 };
 
-const View = {
-  cam: {
-    distance: 50,
-    azimuth: 35 * Math.PI / 180,
-    elevation: 30 * Math.PI / 180,
-    centerX: 6,
-    centerY: 5,
-    centerZ: 6
+const GRADES = {
+  sae_j429: [
+    { key:"G2", name:"Grade 2",  Sp_imp: 55e3 },   // psi
+    { key:"G5", name:"Grade 5",  Sp_imp: 85e3 },
+    { key:"G8", name:"Grade 8",  Sp_imp: 120e3 }
+  ],
+  astm: [
+    { key:"A325", name:"A325", Sp_imp: 92e3 },
+    { key:"A490", name:"A490", Sp_imp: 130e3 }
+  ],
+  iso_metric: [
+    { key:"8.8",  name:"8.8",  Sp_met: 600 },     // MPa
+    { key:"10.9", name:"10.9", Sp_met: 830 },
+    { key:"12.9", name:"12.9", Sp_met: 970 }
+  ]
+};
+
+/* ============================================================
+   Clearance hole tables (Close/Normal/Loose)
+   - We store min/max and also a nominal = (min+max)/2 for use.
+   - Metric table values from ASME B18.2.8 metric hole clearance chart (commonly aligned with ISO 273 practice classes).  :contentReference[oaicite:2]{index=2}
+   - Inch table values from ASME/ANSI clearance hole chart (close/normal/loose). :contentReference[oaicite:3]{index=3}
+   ============================================================ */
+
+function holeNom(min, max){ return 0.5*(min + max); }
+
+const HOLES_METRIC = {
+  // key is nominal thread diameter in mm (integer or common decimal)
+  // values: { close:{min,max}, normal:{min,max}, loose:{min,max} }
+  5:  { close:{min:5.3, max:5.3},  normal:{min:5.5, max:5.5},  loose:{min:5.8, max:6.1} },
+  6:  { close:{min:6.4, max:6.4},  normal:{min:6.6, max:6.6},  loose:{min:7.0, max:7.36} },
+  8:  { close:{min:8.4, max:8.4},  normal:{min:9.0, max:9.0},  loose:{min:10.0,max:10.36} },
+  10: { close:{min:10.5,max:10.5}, normal:{min:11.0,max:11.0}, loose:{min:12.0,max:12.43} },
+  12: { close:{min:13.0,max:13.0}, normal:{min:13.5,max:13.5}, loose:{min:14.5,max:14.93} },
+  14: { close:{min:15.0,max:15.0}, normal:{min:15.5,max:15.5}, loose:{min:16.5,max:16.93} },
+  16: { close:{min:17.0,max:17.0}, normal:{min:17.5,max:17.5}, loose:{min:18.5,max:19.02} },
+  20: { close:{min:21.0,max:21.0}, normal:{min:22.0,max:22.0}, loose:{min:24.0,max:24.52} },
+  24: { close:{min:25.0,max:25.0}, normal:{min:26.0,max:26.0}, loose:{min:28.0,max:28.52} }
+};
+
+const HOLES_INCH = {
+  // key is nominal bolt diameter in inches as string (matches our bolt label parsing)
+  // values: { close:{min,max}, normal:{min,max}, loose:{min,max} }
+  "0.2500": { close:{min:0.2570, max:0.2660}, normal:{min:0.2660, max:0.2720}, loose:{min:0.2810, max:0.2900} },
+  "0.3125": { close:{min:0.3230, max:0.3320}, normal:{min:0.3390, max:0.3480}, loose:{min:0.3580, max:0.3680} },
+  "0.3750": { close:{min:0.3860, max:0.3950}, normal:{min:0.4020, max:0.4110}, loose:{min:0.4210, max:0.4330} },
+  "0.4375": { close:{min:0.4500, max:0.4600}, normal:{min:0.4680, max:0.4790}, loose:{min:0.5000, max:0.5120} },
+  "0.5000": { close:{min:0.5130, max:0.5240}, normal:{min:0.5310, max:0.5430}, loose:{min:0.5620, max:0.5780} },
+  "0.5625": { close:{min:0.5780, max:0.5900}, normal:{min:0.6100, max:0.6250}, loose:{min:0.6560, max:0.6720} },
+  "0.6250": { close:{min:0.6440, max:0.6550}, normal:{min:0.6720, max:0.6880}, loose:{min:0.7030, max:0.7190} },
+  "0.7500": { close:{min:0.7690, max:0.7810}, normal:{min:0.8120, max:0.8280}, loose:{min:0.8750, max:0.8910} },
+  "0.8750": { close:{min:0.9000, max:0.9130}, normal:{min:0.9530, max:0.9690}, loose:{min:1.0000, max:1.0310} },
+  "1.0000": { close:{min:1.0250, max:1.0380}, normal:{min:1.0780, max:1.0940}, loose:{min:1.1250, max:1.1560} }
+};
+
+// Returns hole diameter (nominal) from tables for the currently selected bolt
+function lookupClearanceHoleDia(state, bolt){
+  const fit = state.loads.holeFit;
+  if(fit === "custom") return null;
+
+  if(state.units === "metric"){
+    const key = Number(bolt.d); // our metric d is nominal mm integer for these entries
+    const row = HOLES_METRIC[key];
+    if(!row) return null;
+    const r = row[fit];
+    return r ? holeNom(r.min, r.max) : null;
+  } else {
+    const key = Number(bolt.d).toFixed(4);
+    const row = HOLES_INCH[key];
+    if(!row) return null;
+    const r = row[fit];
+    return r ? holeNom(r.min, r.max) : null;
+  }
+}
+
+/* ============================================================
+   Bolt generators (expanded sets)
+   - We compute At and d2 from pitch/tpi.
+   - Head/nut dims are reasonable placeholders (improve later).
+   ============================================================ */
+
+function uncAt(d, tpi){
+  // Unified tensile-stress area approximation (in^2): At = (pi/4)*(d - 0.9743/n)^2
+  const n = tpi;
+  return Math.PI/4 * Math.pow(d - 0.9743/n, 2);
+}
+function uncD2(d, tpi){
+  // pitch diameter approx for UN threads: d2 ≈ d - 0.64952*(1/n)
+  return d - 0.64952*(1/tpi);
+}
+function metricAt(d, pitch){
+  // ISO metric tensile-stress area approx (mm^2): At = (pi/4)*(d - 0.9382*p)^2
+  return Math.PI/4 * Math.pow(d - 0.9382*pitch, 2);
+}
+function metricD2(d, pitch){
+  // pitch diameter approx: d2 ≈ d - 0.64952*p
+  return d - 0.64952*pitch;
+}
+
+function inchHexAF(d){
+  // common across-flats for hex head cap screws (very typical mapping)
+  // (this is NOT the clearance hole standard; it's just for drawing realism)
+  const map = {
+    0.2500:0.4375, 0.3125:0.5000, 0.3750:0.5625, 0.4375:0.6250, 0.5000:0.7500,
+    0.5625:0.8125, 0.6250:0.9375, 0.7500:1.1250, 0.8750:1.3125, 1.0000:1.5000
+  };
+  const k = Number(d).toFixed(4);
+  return map[k] ?? (1.5*d);
+}
+function inchHeadH(d){ return 0.63*d; } // placeholder
+function inchNutH(d){ return 0.80*d; }  // placeholder
+
+function metricHexAF(d){
+  const map = {5:8,6:10,8:13,10:16,12:18,14:21,16:24,18:27,20:30,22:34,24:36};
+  return map[d] ?? Math.round(1.6*d);
+}
+function metricHeadH(d){
+  const map = {5:3.5,6:4.0,8:5.3,10:6.4,12:7.5,14:8.8,16:10.0,18:11.5,20:12.5,22:14.0,24:15.0};
+  return map[d] ?? (0.7*d);
+}
+function metricNutH(d){
+  const map = {5:4.0,6:5.0,8:6.5,10:8.0,12:10.0,14:11.0,16:13.0,18:15.0,20:16.0,22:18.0,24:19.0};
+  return map[d] ?? (0.85*d);
+}
+
+function makeInchBolt(label, d, tpi, headAF=null, headH=null, nutAF=null, nutH=null){
+  const pitch = 1/tpi;
+  const headD = headAF ?? inchHexAF(d);
+  const nutD  = nutAF  ?? inchHexAF(d);
+  return {
+    label, d, tpi, pitch,
+    At: uncAt(d,tpi),
+    d2: uncD2(d,tpi),
+    headD, headH: (headH ?? inchHeadH(d)),
+    nutD,  nutH:  (nutH  ?? inchNutH(d))
+  };
+}
+function makeMetricBolt(label, d, pitch, headAF=null, headH=null, nutAF=null, nutH=null){
+  const headD = headAF ?? metricHexAF(d);
+  const nutD  = nutAF  ?? metricHexAF(d);
+  return {
+    label, d, pitch,
+    At: metricAt(d,pitch),
+    d2: metricD2(d,pitch),
+    headD, headH: (headH ?? metricHeadH(d)),
+    nutD,  nutH:  (nutH  ?? metricNutH(d))
+  };
+}
+
+// Expanded bolt lists
+const BOLTS = {
+  sae_j429: {
+    coarse: [
+      makeInchBolt("1/4-20",  0.2500, 20),
+      makeInchBolt("5/16-18", 0.3125, 18),
+      makeInchBolt("3/8-16",  0.3750, 16),
+      makeInchBolt("7/16-14", 0.4375, 14),
+      makeInchBolt("1/2-13",  0.5000, 13),
+      makeInchBolt("9/16-12", 0.5625, 12),
+      makeInchBolt("5/8-11",  0.6250, 11),
+      makeInchBolt("3/4-10",  0.7500, 10),
+      makeInchBolt("7/8-9",   0.8750, 9),
+      makeInchBolt("1-8",     1.0000, 8)
+    ],
+    fine: [
+      makeInchBolt("1/4-28",  0.2500, 28),
+      makeInchBolt("5/16-24", 0.3125, 24),
+      makeInchBolt("3/8-24",  0.3750, 24),
+      makeInchBolt("7/16-20", 0.4375, 20),
+      makeInchBolt("1/2-20",  0.5000, 20),
+      makeInchBolt("9/16-18", 0.5625, 18),
+      makeInchBolt("5/8-18",  0.6250, 18),
+      makeInchBolt("3/4-16",  0.7500, 16),
+      makeInchBolt("7/8-14",  0.8750, 14),
+      makeInchBolt("1-12",    1.0000, 12)
+    ]
   },
-  isInteractive: false,
-  dragging: false,
-  dragButton: 0,
-  dragStart: {x:0, y:0, azimuth:0, elevation:0, centerX:0, centerY:0, centerZ:0},
-  hoveredNode: null,
-  pinnedNode: null,
-  hoveredElem: null,
-  pinnedElem: null,
-  mousePos: {x:0, y:0},
+  astm: { coarse: [], fine: [] },
+  iso_metric: {
+    coarse: [
+      makeMetricBolt("M5×0.8",   5, 0.8),
+      makeMetricBolt("M6×1.0",   6, 1.0),
+      makeMetricBolt("M8×1.25",  8, 1.25),
+      makeMetricBolt("M10×1.5",  10, 1.5),
+      makeMetricBolt("M12×1.75", 12, 1.75),
+      makeMetricBolt("M14×2.0",  14, 2.0),
+      makeMetricBolt("M16×2.0",  16, 2.0),
+      makeMetricBolt("M20×2.5",  20, 2.5),
+      makeMetricBolt("M24×3.0",  24, 3.0)
+    ],
+    fine: [
+      makeMetricBolt("M8×1.0",   8, 1.0),
+      makeMetricBolt("M10×1.25", 10, 1.25),
+      makeMetricBolt("M12×1.5",  12, 1.5),
+      makeMetricBolt("M14×1.5",  14, 1.5),
+      makeMetricBolt("M16×1.5",  16, 1.5),
+      makeMetricBolt("M20×1.5",  20, 1.5),
+      makeMetricBolt("M24×2.0",  24, 2.0)
+    ]
+  }
 };
 
-/* =========================
-   DOM
-   ========================= */
-const el = {
-  units: document.getElementById('units'),
-  gInput: document.getElementById('gInput'),
+// Populate ASTM with SAE sizes as placeholder
+BOLTS.astm.coarse = JSON.parse(JSON.stringify(BOLTS.sae_j429.coarse));
+BOLTS.astm.fine   = JSON.parse(JSON.stringify(BOLTS.sae_j429.fine));
 
-  taNodes: document.getElementById('taNodes'),
-  taElems: document.getElementById('taElems'),
-  btnUseNodes: document.getElementById('btnUseNodes'),
-  btnUseElems: document.getElementById('btnUseElems'),
-  btnResetNodes: document.getElementById('btnResetNodes'),
-  btnResetElems: document.getElementById('btnResetElems'),
+/* ============================================================
+   Helpers
+   ============================================================ */
+const $ = id => document.getElementById(id);
 
-  btnDraw: document.getElementById('btnDraw'),
-  btnSolveModes: document.getElementById('btnSolveModes'),
+function gThreadBearing(bolt, Db_eff, mu_t, mu_b){
+  if(!bolt || !(Db_eff>0)) return null;
 
-  modeSelect: document.getElementById('modeSelect'),
-  btnToggleAnim: document.getElementById('btnToggleAnim'),
-  amp: document.getElementById('amp'),
-  speed: document.getElementById('speed'),
+  const d2 = bolt.d2;
+  const pitch = bolt.pitch;
+  if(!(d2>0) || !(pitch>0)) return null;
 
-  summary: document.getElementById('summary'),
-  log: document.getElementById('log'),
-  status: document.getElementById('status'),
-  canvas: document.getElementById('canvas'),
-  selInfo: document.getElementById('selInfo'),
-};
-const ctx = el.canvas.getContext('2d');
+  const alpha = 30 * Math.PI/180;
+  const secA  = 1/Math.cos(alpha);
 
-el.btnExportJSON = document.getElementById('btnExportJSON');
-el.btnImportJSON = document.getElementById('btnImportJSON');
-el.btnExportCSV  = document.getElementById('btnExportCSV');
-el.fileImportJSON = document.getElementById('fileImportJSON');
+  const lambda = Math.atan( pitch / (Math.PI*d2) );
+  const phi    = Math.atan( mu_t * secA );
 
-/* =========================
-   Gravity
-   ========================= */
-function getGravity(){
-  const g = Number(el.gInput.value);
-  return Number.isFinite(g) && g>0 ? g : 1;
-}
-el.units.addEventListener('change', ()=>{
-  if(el.units.value === "metric") el.gInput.value = 9.80665;
-  else el.gInput.value = 386.0886;
-});
+  const threadTerm = (d2/2) * Math.tan(lambda + phi);
+  const bearTerm   = mu_b * (Db_eff/2);
 
-/* =========================
-   Canvas sizing
-   ========================= */
-function resizeCanvas(){
-  const rect = el.canvas.getBoundingClientRect();
-  el.canvas.width = rect.width;
-  el.canvas.height = rect.height;
-  if(Model.isDrawn) requestRedraw();
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-/* =========================
-   Logging
-   ========================= */
-function logClear(){ el.log.textContent = ""; }
-function logLine(msg, cls=null){
-  const d = document.createElement('div');
-  d.textContent = msg;
-  if(cls) d.className = cls;
-  el.log.appendChild(d);
-  el.log.scrollTop = el.log.scrollHeight;
-}
-function setStatus(msg){ el.status.textContent = msg; }
-function badge(text){
-  const b = document.createElement('span');
-  b.className = 'badge';
-  b.textContent = text;
-  return b;
-}
-function renderSummary(){
-  el.summary.innerHTML = "";
-  el.summary.appendChild(badge(`Nodes: ${Model.nodes.length}`));
-  el.summary.appendChild(badge(`Segments: ${Model.elems.length}`));
-  const prescribed = Model.nodes.reduce((acc,nd)=>acc +
-    (nd.ux.prescribed?1:0)+(nd.uy.prescribed?1:0)+(nd.uz.prescribed?1:0)+
-    (nd.rx.prescribed?1:0)+(nd.ry.prescribed?1:0)+(nd.rz.prescribed?1:0), 0);
-  el.summary.appendChild(badge(`Prescribed DOF: ${prescribed}`));
-  const lumpW = Model.nodes.reduce((a,n)=>a+(n.W||0),0);
-  el.summary.appendChild(badge(`Total W: ${lumpW}`));
-  if(Model.lastModes){
-    el.summary.appendChild(badge(`Solved modes: ${Model.lastModes.freqHz.length}`));
-  }
+  const g = threadTerm + bearTerm;
+  return (g>0) ? g : null;
 }
 
-/* =========================
-   Parsing utilities
-   ========================= */
-function isBlankToken(t){
-  if(t==null) return true;
-  const s = String(t).trim();
-  return s === "" || s === "." || /^na$/i.test(s);
+function torqueBandForState(state, geom){
+  const b = state.bolt.data;
+  if(!b || !geom) return { feasible:false, reason:"No bolt/geom" };
+
+  const kbOut = calcBoltStiffness(state, geom);
+  const kmOut = calcMemberStiffnessShigley(state, geom);
+  const C = (kbOut.kb + kmOut.km) > 0 ? kbOut.kb/(kbOut.kb + kmOut.km) : null;
+  if(C==null) return { feasible:false, reason:"Bad stiffness" };
+
+  const P = state.loads.P;
+  const Fi_req = (1 - C) * P;
+
+  const Fproof = calcProofLoad(state);
+  if(!(Fproof>0)) return { feasible:false, reason:"No proof load" };
+
+  const Fi_max_allow = state.loads.proofLimit * Fproof - C * P;
+  if(!(Fi_max_allow>0)) return { feasible:false, reason:"No allowable preload" };
+
+  const D_outer = (state.loads.torqueAt === "head") ? geom.Db_top : geom.Db_bot;
+  const D_inner = geom.dh;
+  const Db_eff  = 0.5*(D_outer + D_inner);
+
+  const tol = state.loads.TtolPct;
+  const muT_hi = state.loads.muTmax;
+  const muB_hi = state.loads.muBmax;
+  const muT_lo = state.loads.muTmin;
+  const muB_lo = state.loads.muBmin;
+
+  const g_hi = gThreadBearing(b, Db_eff, muT_hi, muB_hi);
+  const g_lo = gThreadBearing(b, Db_eff, muT_lo, muB_lo);
+
+  if(!(g_hi>0) || !(g_lo>0)) return { feasible:false, reason:"Bad g()" };
+
+  const TminReq   = Fi_req       * g_hi / Math.max(1e-12, (1 - tol));
+  const TmaxAllow = Fi_max_allow * g_lo / (1 + tol);
+
+  const feasible = (TminReq <= TmaxAllow);
+  const Tset = feasible ? 0.5*(TminReq + TmaxAllow) : null;
+
+  return { feasible, reason: feasible ? "OK" : "No feasible torque band", C, Fi_req, Fi_max_allow, Fproof, Db_eff, TminReq, TmaxAllow, Tset };
 }
-function toNumberOrNull(t){
-  if(isBlankToken(t)) return null;
-  const v = Number(String(t).trim());
-  return Number.isFinite(v) ? v : NaN;
-}
-function toNumberOrZero(t){
-  if(isBlankToken(t)) return 0;
-  const v = Number(String(t).trim());
-  return Number.isFinite(v) ? v : NaN;
-}
-function splitLine(line){
-  if(line.includes("\t")) return line.split("\t");
-  if(line.includes(","))  return line.split(",");
-  return line.trim().split(/\s+/);
-}
-function isCommentOrBlank(line){
-  const s = line.trim();
-  return s === "" || s.startsWith("#") || s.startsWith("//");
-}
-function detectHeader(tokens){
-  return tokens.some(t => /[A-Za-z]/.test(String(t)));
-}
-function normalizeHeader(h){
-  return String(h).trim().toLowerCase()
-    .replace(/\s+/g,'')
-    .replace(/_/g,'')
-    .replace(/-/g,'');
+
+function fmt(x, digits=4){
+  if (x === null || x === undefined || Number.isNaN(x)) return "—";
+  const ax = Math.abs(x);
+  if (ax !== 0 && (ax >= 1e6 || ax < 1e-3)) return x.toExponential(3);
+  return Number(x).toFixed(digits).replace(/\.?0+$/,"");
 }
 
-/* =========================
-   Parse nodes
-   ========================= */
-function parseNodes(text){
-  const lines = text.split(/\r?\n/);
-  const rows = [];
-  for(const line of lines){
-    if(isCommentOrBlank(line)) continue;
-    const toks = splitLine(line).map(s=>String(s).trim());
-    if(toks.length) rows.push(toks);
-  }
-  if(rows.length === 0) throw new Error("No node data rows found.");
+function unitLabel(isImp){
+  return isImp ? {L:"in", F:"lbf", T:"lbf·in", E:"psi"} : {L:"mm", F:"N", T:"N·mm", E:"MPa"};
+}
 
-  let headerMap = null, startIdx = 0;
-  if(detectHeader(rows[0])){
-    headerMap = new Map();
-    rows[0].forEach((h,i)=>headerMap.set(normalizeHeader(h), i));
-    startIdx = 1;
-  }
-  const get = (toks, name, idxFallback) => {
-    if(headerMap){
-      const i = headerMap.get(normalizeHeader(name));
-      return (i==null) ? null : toks[i];
-    }
-    return toks[idxFallback];
-  };
+function materialE(matKey, isImp){
+  const m = MATERIALS.find(x => x.key === matKey);
+  if(!m) return null;
+  return isImp ? m.E_imp : m.E_met;
+}
 
-  const nodes = [];
-  const seen = new Set();
-  for(let r=startIdx; r<rows.length; r++){
-    const toks = rows[r];
-    const nodeTok = get(toks,"node",0) ?? get(toks,"nodeno",0) ?? toks[0];
-    const id = parseInt(String(nodeTok).trim(), 10);
-    if(!Number.isFinite(id)) throw new Error(`Row ${r+1}: invalid node number "${nodeTok}"`);
-    if(seen.has(id)) throw new Error(`Row ${r+1}: duplicate node number ${id}`);
-    seen.add(id);
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-    const x = toNumberOrNull(get(toks,"x",1));
-    const y = toNumberOrNull(get(toks,"y",2));
-    const z = toNumberOrNull(get(toks,"z",3));
-    if(!Number.isFinite(x)) throw new Error(`Row ${r+1}: invalid X`);
-    if(!Number.isFinite(y)) throw new Error(`Row ${r+1}: invalid Y`);
-    if(!Number.isFinite(z)) throw new Error(`Row ${r+1}: invalid Z`);
+/* ============================================================
+   UI construction
+   ============================================================ */
+function buildMaterialsSelect(sel){
+  sel.innerHTML = "";
+  MATERIALS.forEach(m=>{
+    const opt = document.createElement("option");
+    opt.value = m.key;
+    opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+}
 
-    const dx = toNumberOrNull(get(toks,"delx",4) ?? get(toks,"dx",4));
-    const dy = toNumberOrNull(get(toks,"dely",5) ?? get(toks,"dy",5));
-    const dz = toNumberOrNull(get(toks,"delz",6) ?? get(toks,"dz",6));
+function buildMemberRows(){
+  const n = Number($("numMembers").value);
+  const wrap = $("membersArea");
+  wrap.innerHTML = "";
 
-    const thx = toNumberOrNull(get(toks,"thetaxx",7) ?? get(toks,"thxx",7) ?? get(toks,"rx",7));
-    const thy = toNumberOrNull(get(toks,"thetayy",8) ?? get(toks,"thyy",8) ?? get(toks,"ry",8));
-    const thz = toNumberOrNull(get(toks,"thetazz",9) ?? get(toks,"thzz",9) ?? get(toks,"rz",9));
+  for(let i=1;i<=n;i++){
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.margin = "10px 0 0";
+    card.style.borderRadius = "12px";
+    card.innerHTML = `
+      <h2 style="margin-bottom:8px;">Clamped Member ${i}</h2>
+      <div class="row3">
+        <div>
+          <label>Thickness</label>
+          <input id="m_t_${i}" type="number" step="any" value="${0.25}">
+        </div>
+        <div>
+          <label>Material</label>
+          <select id="m_mat_${i}"></select>
+        </div>
+        <div>
+          <label>Special (k or E)</label>
+          <input id="m_extra_${i}" type="number" step="any" placeholder="auto" />
+        </div>
+      </div>
+      <div class="small muted" id="m_help_${i}">For Gasket/O-ring enter k; for General enter E. Otherwise leave blank.</div>
+    `;
+    wrap.appendChild(card);
 
-    const W = toNumberOrZero(get(toks,"w",10) ?? get(toks,"weight",10));
+    const sel = $("m_mat_"+i);
+    buildMaterialsSelect(sel);
+    sel.value = "steel";
 
-    if(!Number.isFinite(W) || W<0) throw new Error(`Row ${r+1}: invalid W (must be >=0)`);
-    if(dx!==null && !Number.isFinite(dx)) throw new Error(`Row ${r+1}: invalid delX`);
-    if(dy!==null && !Number.isFinite(dy)) throw new Error(`Row ${r+1}: invalid delY`);
-    if(dz!==null && !Number.isFinite(dz)) throw new Error(`Row ${r+1}: invalid delZ`);
-    if(thx!==null && !Number.isFinite(thx)) throw new Error(`Row ${r+1}: invalid thetaXX`);
-    if(thy!==null && !Number.isFinite(thy)) throw new Error(`Row ${r+1}: invalid thetaYY`);
-    if(thz!==null && !Number.isFinite(thz)) throw new Error(`Row ${r+1}: invalid thetaZZ`);
-
-    nodes.push({
-      id, x, y, z,
-      ux: { prescribed: dx!==null, value: dx ?? 0 },
-      uy: { prescribed: dy!==null, value: dy ?? 0 },
-      uz: { prescribed: dz!==null, value: dz ?? 0 },
-      rx: { prescribed: thx!==null, value: thx ?? 0 },
-      ry: { prescribed: thy!==null, value: thy ?? 0 },
-      rz: { prescribed: thz!==null, value: thz ?? 0 },
-      W
+    sel.addEventListener("change", ()=>{
+      updateMemberHelp(i);
+      recalcAndDraw(false);
     });
+    $("m_t_"+i).addEventListener("input", ()=>recalcAndDraw(false));
+    $("m_extra_"+i).addEventListener("input", ()=>recalcAndDraw(false));
+    updateMemberHelp(i);
   }
-  return nodes;
 }
 
-/* =========================
-   Parse elems
-   ========================= */
-function parseElems(text){
-  const lines = text.split(/\r?\n/);
-  const rows = [];
-  for(const line of lines){
-    if(isCommentOrBlank(line)) continue;
-    const toks = splitLine(line).map(s=>String(s).trim());
-    if(toks.length) rows.push(toks);
-  }
-  if(rows.length === 0) throw new Error("No segment data rows found.");
+function updateMemberHelp(i){
+  const key = $("m_mat_"+i).value;
+  const m = MATERIALS.find(x=>x.key===key);
+  const help = $("m_help_"+i);
+  if(m?.needsK) help.textContent = "This layer uses direct stiffness k (force/length). Enter k in 'Special'.";
+  else if(m?.needsE) help.textContent = "This layer uses modulus E. Enter E in 'Special'.";
+  else help.textContent = "Standard material. Leave 'Special' blank (uses library E).";
+}
 
-  let headerMap = null, startIdx = 0;
-  if(detectHeader(rows[0])){
-    headerMap = new Map();
-    rows[0].forEach((h,i)=>headerMap.set(normalizeHeader(h), i));
-    startIdx = 1;
+/* ============================================================
+   Units-driven dropdown logic
+   ============================================================ */
+function rebuildBoltFamilyOptions(){
+  const isImp = $("isImperial").checked;
+  const famSel = $("boltFamily");
+  famSel.innerHTML = "";
+  const families = isImp ? BOLT_FAMILIES.imperial : BOLT_FAMILIES.metric;
+  families.forEach(f=>{
+    const opt = document.createElement("option");
+    opt.value = f.key;
+    opt.textContent = f.name;
+    famSel.appendChild(opt);
+  });
+  famSel.value = families[0].key;
+}
+
+function rebuildGradeOptions(){
+  const family = $("boltFamily").value;
+  const gradeSel = $("boltGrade");
+  gradeSel.innerHTML = "";
+  (GRADES[family] || []).forEach(g=>{
+    const opt = document.createElement("option");
+    opt.value = g.key;
+    opt.textContent = g.name;
+    gradeSel.appendChild(opt);
+  });
+  gradeSel.value = (GRADES[family] && GRADES[family][0]) ? GRADES[family][0].key : "";
+}
+
+function rebuildSizeOptions(){
+  const family = $("boltFamily").value;
+  const series = $("threadSeries").value;
+  const sizeSel = $("boltSize");
+  sizeSel.innerHTML = "";
+  const list = (BOLTS[family] && BOLTS[family][series]) ? BOLTS[family][series] : [];
+  list.forEach((b,idx)=>{
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = b.label;
+    sizeSel.appendChild(opt);
+  });
+  sizeSel.value = list.length ? "0" : "";
+}
+
+function updateBoltEDefault(){
+  const isImp = $("isImperial").checked;
+  $("boltE").value = isImp ? 30e6 : 200000;
+}
+
+/* ============================================================
+   Read inputs into state
+   ============================================================ */
+function readState(){
+  const isImp = $("isImperial").checked;
+  const u = unitLabel(isImp);
+  const family = $("boltFamily").value;
+  const series = $("threadSeries").value;
+  const gradeKey = $("boltGrade").value;
+
+  const sizeIdx = Number($("boltSize").value || 0);
+  const bolt = (BOLTS[family] && BOLTS[family][series]) ? BOLTS[family][series][sizeIdx] : null;
+  const grade = (GRADES[family] || []).find(g=>g.key===gradeKey) || null;
+
+  const nMembers = Number($("numMembers").value);
+  const members = [];
+  for(let i=1;i<=nMembers;i++){
+    const t = Number($("m_t_"+i).value || 0);
+    const matKey = $("m_mat_"+i).value;
+    const extra = $("m_extra_"+i).value.trim()==="" ? null : Number($("m_extra_"+i).value);
+    members.push({ t, matKey, extra });
   }
-  const get = (toks, name, idxFallback) => {
-    if(headerMap){
-      const i = headerMap.get(normalizeHeader(name));
-      return (i==null) ? null : toks[i];
+
+  return {
+    units: isImp ? "imperial" : "metric",
+    u,
+    bolt: {
+      family, series, gradeKey,
+      sizeIdx,
+      data: bolt,
+      grade: grade,
+      E: Number($("boltE").value || (isImp ? 30e6 : 200000)),
+      etaThread: clamp(Number($("etaThread").value || 0.90), 0.80, 1.00)
+    },
+    geom: {
+      frustumAngleDeg: Number($("frustumAngle").value || 30),
+      useHeadWasher: $("useHeadWasher").value === "yes",
+      tHeadWasher: Number($("tHeadWasher").value || 0),
+      odHeadWasher: Number($("odHeadWasher").value || 0),
+      matHeadWasher: $("matHeadWasher").value,
+
+      useNutWasher: $("useNutWasher").value === "yes",
+      tNutWasher: Number($("tNutWasher").value || 0),
+      odNutWasher: Number($("odNutWasher").value || 0),
+      matNutWasher: $("matNutWasher").value,
+
+      members,
+      Lshank: Number($("Lshank").value || 0)
+    },
+    loads: {
+      P: Number($("Pext").value || 0),
+      T: Number($("Ttarget").value || 0),
+      torqueAt: $("torqueAt").value,
+      TtolPct: Number($("Ttol").value || 0) / 100,
+      muTmin: Number($("muTmin").value || 0),
+      muTmax: Number($("muTmax").value || 0),
+      muBmin: Number($("muBmin").value || 0),
+      muBmax: Number($("muBmax").value || 0),
+
+      holeFit: $("holeFit").value,
+      holeDiaOverride: $("holeDia").value.trim()==="" ? null : Number($("holeDia").value),
+
+      proofLimit: Number($("proofLimit").value || 1.0)
     }
-    return toks[idxFallback];
   };
-
-  const elems = [];
-  for(let r=startIdx; r<rows.length; r++){
-    const toks = rows[r];
-
-    const elemTok = get(toks,"elem",0) ?? get(toks,"element",0) ?? toks[0];
-    const niTok = get(toks,"ni",1) ?? get(toks,"nodei",1) ?? toks[1];
-    const njTok = get(toks,"nj",2) ?? get(toks,"nodej",2) ?? toks[2];
-
-    const id = parseInt(String(elemTok).trim(), 10);
-    const ni = parseInt(String(niTok).trim(),10);
-    const nj = parseInt(String(njTok).trim(),10);
-
-    if(!Number.isFinite(id)) throw new Error(`Row ${r+1}: invalid element number`);
-    if(!Number.isFinite(ni) || !Number.isFinite(nj)) throw new Error(`Row ${r+1}: invalid node i/j`);
-    if(ni === nj) throw new Error(`Row ${r+1}: ni and nj cannot be the same (${ni})`);
-
-    const E   = toNumberOrNull(get(toks,"e",3));
-    const G   = toNumberOrNull(get(toks,"g",4));
-    const Izz = toNumberOrNull(get(toks,"izz",5));
-    const Iyy = toNumberOrNull(get(toks,"iyy",6));
-    const Jyz = toNumberOrNull(get(toks,"jyz",7) ?? get(toks,"j",7));
-    const Ayz = toNumberOrNull(get(toks,"ayz",8) ?? get(toks,"a",8));
-    const rho = toNumberOrZero(get(toks,"rho",9));
-    const x3  = toNumberOrNull(get(toks,"x3",10));
-    const y3  = toNumberOrNull(get(toks,"y3",11));
-    const z3  = toNumberOrNull(get(toks,"z3",12));
-
-    if(!Number.isFinite(E) || E<=0) throw new Error(`Row ${r+1}: invalid E (>0)`);
-    if(!Number.isFinite(G) || G<=0) throw new Error(`Row ${r+1}: invalid G (>0)`);
-    if(!Number.isFinite(Izz) || Izz<=0) throw new Error(`Row ${r+1}: invalid Izz (>0)`);
-    if(!Number.isFinite(Iyy) || Iyy<=0) throw new Error(`Row ${r+1}: invalid Iyy (>0)`);
-    if(!Number.isFinite(Jyz) || Jyz<=0) throw new Error(`Row ${r+1}: invalid Jyz (>0)`);
-    if(!Number.isFinite(Ayz) || Ayz<=0) throw new Error(`Row ${r+1}: invalid Ayz (>0)`);
-    if(!Number.isFinite(rho) || rho<0)  throw new Error(`Row ${r+1}: invalid rho (>=0)`);
-    if(!Number.isFinite(x3)) throw new Error(`Row ${r+1}: invalid x3`);
-    if(!Number.isFinite(y3)) throw new Error(`Row ${r+1}: invalid y3`);
-    if(!Number.isFinite(z3)) throw new Error(`Row ${r+1}: invalid z3`);
-
-    elems.push({ id, ni, nj, E, G, Izz, Iyy, Jyz, Ayz, rho, x3, y3, z3 });
-  }
-  return elems;
 }
 
-function downloadText(filename, text, mime="text/plain"){
-  const blob = new Blob([text], {type: mime});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+/* ============================================================
+   Derived geometry & stiffness
+   ============================================================ */
+function deriveGeometry(state){
+  const b = state.bolt.data;
+  if(!b) return null;
 
-function nodesToTSV(nodes){
-  const header = "node\tx\ty\tz\tdelX\tdelY\tdelZ\tthetaXX\tthetaYY\tthetaZZ\tW";
-  const rows = nodes
-    .slice()
-    .sort((a,b)=>a.id-b.id)
-    .map(n=>{
-      const dx = n.ux?.prescribed ? n.ux.value : "";
-      const dy = n.uy?.prescribed ? n.uy.value : "";
-      const dz = n.uz?.prescribed ? n.uz.value : "";
-      const rx = n.rx?.prescribed ? n.rx.value : "";
-      const ry = n.ry?.prescribed ? n.ry.value : "";
-      const rz = n.rz?.prescribed ? n.rz.value : "";
-      const W  = (n.W ?? 0);
-      return [n.id,n.x,n.y,n.z,dx,dy,dz,rx,ry,rz,W].join("\t");
-    });
-  return header + "\n" + rows.join("\n");
-}
+  const tHW = state.geom.useHeadWasher ? state.geom.tHeadWasher : 0;
+  const tNW = state.geom.useNutWasher  ? state.geom.tNutWasher  : 0;
+  const tMembers = state.geom.members.reduce((s,m)=>s + (m.t||0), 0);
+  const Lg = tHW + tMembers + tNW;
 
-function elemsToTSV(elems){
-  const header = "elem\tni\tnj\tE\tG\tIzz\tIyy\tJyz\tAyz\trho\tx3\ty3\tz3";
-  const rows = elems
-    .slice()
-    .sort((a,b)=>a.id-b.id)
-    .map(e=>[e.id,e.ni,e.nj,e.E,e.G,e.Izz,e.Iyy,e.Jyz,e.Ayz,(e.rho??0),e.x3,e.y3,e.z3].join("\t"));
-  return header + "\n" + rows.join("\n");
-}
+  const Db_top = state.geom.useHeadWasher ? state.geom.odHeadWasher : b.headD;
+  const Db_bot = state.geom.useNutWasher  ? state.geom.odNutWasher  : b.nutD;
 
-// Get "current state" from textareas (so export reflects edits even if user forgot Use Nodes/Use Segments)
-function snapshotFromTextareas(){
-  const nodes = parseNodes(el.taNodes.value||"");
-  const elems = parseElems(el.taElems.value||"");
-  const units = el.units.value;
-  const g = getGravity();
-  return { units, g, nodes, elems };
-}
-
-function stateToCSV(state){
-  // single CSV file with two sections (common “one file” approach)
-  const nodesHeader = "node,x,y,z,delX,delY,delZ,thetaXX,thetaYY,thetaZZ,W";
-  const nodeRows = state.nodes
-    .slice().sort((a,b)=>a.id-b.id)
-    .map(n=>{
-      const dx = n.ux?.prescribed ? n.ux.value : "";
-      const dy = n.uy?.prescribed ? n.uy.value : "";
-      const dz = n.uz?.prescribed ? n.uz.value : "";
-      const rx = n.rx?.prescribed ? n.rx.value : "";
-      const ry = n.ry?.prescribed ? n.ry.value : "";
-      const rz = n.rz?.prescribed ? n.rz.value : "";
-      const W  = (n.W ?? 0);
-      return [n.id,n.x,n.y,n.z,dx,dy,dz,rx,ry,rz,W].join(",");
-    });
-
-  const elemsHeader = "elem,ni,nj,E,G,Izz,Iyy,Jyz,Ayz,rho,x3,y3,z3";
-  const elemRows = state.elems
-    .slice().sort((a,b)=>a.id-b.id)
-    .map(e=>[e.id,e.ni,e.nj,e.E,e.G,e.Izz,e.Iyy,e.Jyz,e.Ayz,(e.rho??0),e.x3,e.y3,e.z3].join(","));
-
-  return [
-    `# 3D Frame Modal Model Export`,
-    `# units=${state.units}, g=${state.g}`,
-    ``,
-    `NODES`,
-    nodesHeader,
-    ...nodeRows,
-    ``,
-    `SEGMENTS`,
-    elemsHeader,
-    ...elemRows,
-    ``
-  ].join("\n");
-}
-
-
-/* =========================
-   Install / validate
-   ========================= */
-
-function installNodes(nodes, opts={ resetView:true }){
-  const { resetView=true } = opts;
-
-  Model.nodes = nodes;
-  Model.nodeById = new Map(nodes.map(n=>[n.id,n]));
-  // nodeIndexById is rebuilt in buildBcByDof() during assembly
-
-  if(resetView){
-    Model.isDrawn = false;
-    Model.lastModes = null;
-    View.hoveredNode = View.pinnedNode = null;
-    View.hoveredElem = View.pinnedElem = null;
-  }
-  renderSummary();
-}
-
-function installElems(elems, opts={ resetView:true }){
-  const { resetView=true } = opts;
-
-  Model.elems = elems;
-  Model.elemById = new Map(elems.map(e=>[e.id,e]));
-
-  if(resetView){
-    Model.isDrawn = false;
-    Model.lastModes = null;
-    View.hoveredNode = View.pinnedNode = null;
-    View.hoveredElem = View.pinnedElem = null;
-  }
-  renderSummary();
-}
-
-
-function crossValidate(){
-  let ok = true;
-  for(const e of Model.elems){
-    if(!Model.nodeById.has(e.ni)){ logLine(`ERROR: Segment ${e.id} references missing node ${e.ni}`, "log-err"); ok=false; }
-    if(!Model.nodeById.has(e.nj)){ logLine(`ERROR: Segment ${e.id} references missing node ${e.nj}`, "log-err"); ok=false; }
-  }
-  return ok;
-}
-function updateButtons(){
-  const haveData = (Model.nodes.length>0 && Model.elems.length>0);
-  el.btnDraw.disabled = !haveData;
-  el.btnSolveModes.disabled = !haveData;
-}
-
-/* =========================
-   3D Camera & Projection
-   ========================= */
-function project3D(x, y, z){
-  const cam = View.cam;
-  const camX = cam.centerX + cam.distance * Math.cos(cam.elevation) * Math.cos(cam.azimuth);
-  const camY = cam.centerY + cam.distance * Math.cos(cam.elevation) * Math.sin(cam.azimuth);
-  const camZ = cam.centerZ + cam.distance * Math.sin(cam.elevation);
-
-  const dx = x - camX, dy = y - camY, dz = z - camZ;
-
-  const toCenter = { x: cam.centerX - camX, y: cam.centerY - camY, z: cam.centerZ - camZ };
-  const dist = Math.hypot(toCenter.x,toCenter.y,toCenter.z);
-  const forward = { x: toCenter.x/dist, y: toCenter.y/dist, z: toCenter.z/dist };
-
-  const worldUp = {x:0,y:0,z:1};
-  const right = {
-    x: forward.y*worldUp.z - forward.z*worldUp.y,
-    y: forward.z*worldUp.x - forward.x*worldUp.z,
-    z: forward.x*worldUp.y - forward.y*worldUp.x
-  };
-  const rL = Math.hypot(right.x,right.y,right.z) || 1;
-  right.x/=rL; right.y/=rL; right.z/=rL;
-
-  const up = {
-    x: right.y*forward.z - right.z*forward.y,
-    y: right.z*forward.x - right.x*forward.z,
-    z: right.x*forward.y - right.y*forward.x
-  };
-
-  const screenX = dx*right.x + dy*right.y + dz*right.z;
-  const screenY = dx*up.x + dy*up.y + dz*up.z;
-
-  const scale = 600 / cam.distance;
-  const cx = el.canvas.width/2, cy = el.canvas.height/2;
-
-  return { x: cx + screenX*scale, y: cy - screenY*scale };
-}
-function fitView3D(nodes){
-  if(!nodes || nodes.length===0) return;
-  let minX=Infinity, minY=Infinity, minZ=Infinity;
-  let maxX=-Infinity, maxY=-Infinity, maxZ=-Infinity;
-  for(const n of nodes){
-    minX=Math.min(minX,n.x); maxX=Math.max(maxX,n.x);
-    minY=Math.min(minY,n.y); maxY=Math.max(maxY,n.y);
-    minZ=Math.min(minZ,n.z); maxZ=Math.max(maxZ,n.z);
-  }
-  const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
-  const span = Math.max(maxX-minX, maxY-minY, maxZ-minZ, 50);
-  View.cam.centerX=cx; View.cam.centerY=cy; View.cam.centerZ=cz;
-  View.cam.distance = span*2.5;
-}
-
-/* =========================
-   Redraw scheduler
-   ========================= */
-let _needsRedraw = false;
-function requestRedraw(){
-  if(_needsRedraw) return;
-  _needsRedraw = true;
-  requestAnimationFrame(()=>{ _needsRedraw=false; renderFrame(); });
-}
-function renderFrame(){
-  if(!Model.isDrawn) return;
-
-  // If anim is on, drawSelectedModeAnimated already renders frames continuously.
-  if(animOn) return;
-
-  if(Model.lastModes){
-    const idx = Number(el.modeSelect.value||0);
-    drawPrimary({U:Model.lastModes.modes[idx], scale:Number(el.amp.value)||10});
-  }else{
-    drawPrimary();
-  }
-}
-
-/* =========================
-   Drawing helpers
-   ========================= */
-function clearCanvas(){
-  ctx.clearRect(0,0,el.canvas.width,el.canvas.height);
-  ctx.fillStyle="#fff";
-  ctx.fillRect(0,0,el.canvas.width,el.canvas.height);
-}
-function drawGrid3D(){
-  const gridSize=200, gridStep=20;
-  ctx.save();
-  ctx.strokeStyle="rgba(0,0,0,0.08)";
-  ctx.lineWidth=0.5;
-
-  for(let x=-gridSize; x<=gridSize; x+=gridStep){
-    const p1=project3D(x,-gridSize,0), p2=project3D(x,gridSize,0);
-    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
-  }
-  for(let y=-gridSize; y<=gridSize; y+=gridStep){
-    const p1=project3D(-gridSize,y,0), p2=project3D(gridSize,y,0);
-    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
-  }
-  ctx.restore();
-}
-function drawBCSymbol(n){
-  const hasTransBC = n.ux.prescribed || n.uy.prescribed || n.uz.prescribed;
-  const hasRotBC   = n.rx.prescribed || n.ry.prescribed || n.rz.prescribed;
-  if(!hasTransBC && !hasRotBC) return;
-  const p=project3D(n.x,n.y,n.z);
-  ctx.save();
-  if(hasTransBC){
-    const size=10;
-    ctx.fillStyle="rgba(59,130,246,0.7)";
-    ctx.strokeStyle="rgba(37,99,235,0.9)";
-    ctx.lineWidth=1.5;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y - size);
-    ctx.lineTo(p.x - size*0.866, p.y + size*0.5);
-    ctx.lineTo(p.x + size*0.866, p.y + size*0.5);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-  }
-  if(hasRotBC){
-    const size=6;
-    ctx.fillStyle="rgba(168,85,247,0.7)";
-    ctx.strokeStyle="rgba(147,51,234,0.9)";
-    ctx.lineWidth=1.5;
-    ctx.beginPath();
-    ctx.rect(p.x - size/2, p.y - size/2, size, size);
-    ctx.fill(); ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/* =========================
-   Local axis triad (x3/y3/z3) for selected element
-   ========================= */
-function localAxesFromElem(ni, nj, e){
-  const dx = nj.x-ni.x, dy = nj.y-ni.y, dz = nj.z-ni.z;
-  const L = Math.hypot(dx,dy,dz);
-  if(L < 1e-12) return {ok:false, warn:"zero length", xhat:null, yhat:null, zhat:null};
-
-  const xhat = {x:dx/L, y:dy/L, z:dz/L};
-
-  const vx = e.x3 - ni.x, vy = e.y3 - ni.y, vz = e.z3 - ni.z;
-  const dot = vx*xhat.x + vy*xhat.y + vz*xhat.z;
-  const zx0 = vx - dot*xhat.x, zy0 = vy - dot*xhat.y, zz0 = vz - dot*xhat.z;
-  const zL = Math.hypot(zx0,zy0,zz0);
-  if(zL < 1e-12) return {ok:false, warn:"x3/y3/z3 collinear with element axis", xhat, yhat:null, zhat:null};
-
-  const zhat = {x:zx0/zL, y:zy0/zL, z:zz0/zL};
-
-  // y = z × x  (right-handed)
-  const yx = zhat.y*xhat.z - zhat.z*xhat.y;
-  const yy = zhat.z*xhat.x - zhat.x*xhat.z;
-  const yz = zhat.x*xhat.y - zhat.y*xhat.x;
-  const yL = Math.hypot(yx,yy,yz) || 1;
-  const yhat = {x:yx/yL, y:yy/yL, z:yz/yL};
-
-  return {ok:true, warn:null, xhat, yhat, zhat};
-}
-
-function drawLocalTriadForSelectedElem(){
-  const elemId = (View.pinnedElem!=null) ? View.pinnedElem : View.hoveredElem;
-  if(elemId==null) return;
-  const e = Model.elemById.get(elemId);
-  if(!e) return;
-  const ni=Model.nodeById.get(e.ni), nj=Model.nodeById.get(e.nj);
-  if(!ni||!nj) return;
-
-  const basis = localAxesFromElem(ni,nj,e);
-  if(!basis.ok) return;
-
-  const mx=(ni.x+nj.x)/2, my=(ni.y+nj.y)/2, mz=(ni.z+nj.z)/2;
-  const p0 = project3D(mx,my,mz);
-
-  // triad length in model units -> screen projected by project3D, so choose modest length
-  const Ltri = 18;
-  const px = project3D(mx + basis.xhat.x*Ltri, my + basis.xhat.y*Ltri, mz + basis.xhat.z*Ltri);
-  const py = project3D(mx + basis.yhat.x*Ltri, my + basis.yhat.y*Ltri, mz + basis.yhat.z*Ltri);
-  const pz = project3D(mx + basis.zhat.x*Ltri, my + basis.zhat.y*Ltri, mz + basis.zhat.z*Ltri);
-
-  ctx.save();
-  ctx.lineWidth = 2.2;
-
-  // x (red-ish)
-  ctx.strokeStyle = "rgba(220,38,38,0.95)";
-  ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(px.x,px.y); ctx.stroke();
-  ctx.fillStyle = "rgba(220,38,38,0.95)";
-  ctx.fillText("x3", px.x+4, px.y+4);
-
-  // y (green-ish)
-  ctx.strokeStyle = "rgba(22,163,74,0.95)";
-  ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(py.x,py.y); ctx.stroke();
-  ctx.fillStyle = "rgba(22,163,74,0.95)";
-  ctx.fillText("y3", py.x+4, py.y+4);
-
-  // z (blue-ish)
-  ctx.strokeStyle = "rgba(37,99,235,0.95)";
-  ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(pz.x,pz.y); ctx.stroke();
-  ctx.fillStyle = "rgba(37,99,235,0.95)";
-  ctx.fillText("z3", pz.x+4, pz.y+4);
-
-  ctx.restore();
-}
-
-/* =========================
-   Main draw
-   ========================= */
-function drawPrimary(modeOverlay=null){
-  clearCanvas();
-  drawGrid3D();
-
-  // elements (undeformed)
-  ctx.save();
-  for(const e of Model.elems){
-    const ni=Model.nodeById.get(e.ni), nj=Model.nodeById.get(e.nj);
-    if(!ni||!nj) continue;
-    const a=project3D(ni.x,ni.y,ni.z), b=project3D(nj.x,nj.y,nj.z);
-
-    const isHovered=(View.hoveredElem===e.id);
-    const isPinned=(View.pinnedElem===e.id);
-
-    if(isPinned){ ctx.strokeStyle="rgba(251,191,36,0.95)"; ctx.lineWidth=4.0; }
-    else if(isHovered){ ctx.strokeStyle="rgba(59,130,246,0.9)"; ctx.lineWidth=3.5; }
-    else { ctx.strokeStyle="rgba(0,0,0,0.55)"; ctx.lineWidth=2.0; }
-
-    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-  }
-  ctx.restore();
-
-  // overlay selected mode shape (deformed polyline)
-  if(modeOverlay){
-    const {U, scale} = modeOverlay;
-    ctx.save();
-    ctx.strokeStyle="rgba(220,38,38,0.85)";
-    ctx.lineWidth=2.2;
-    for(const e of Model.elems){
-      const ni=Model.nodeById.get(e.ni), nj=Model.nodeById.get(e.nj);
-      if(!ni||!nj) continue;
-      const iIdx = Model.nodeIndexById.get(ni.id);
-      const jIdx = Model.nodeIndexById.get(nj.id);
-
-      const ux1=U[6*iIdx+0], uy1=U[6*iIdx+1], uz1=U[6*iIdx+2];
-      const ux2=U[6*jIdx+0], uy2=U[6*jIdx+1], uz2=U[6*jIdx+2];
-
-      const p1=project3D(ni.x+scale*ux1, ni.y+scale*uy1, ni.z+scale*uz1);
-      const p2=project3D(nj.x+scale*ux2, nj.y+scale*uy2, nj.z+scale*uz2);
-      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
-    }
-    ctx.restore();
+  // NEW: table-based clearance hole lookup for Close/Normal/Loose; Custom overrides
+  let dh = null;
+  if (state.loads.holeFit === "custom") {
+    dh = (state.loads.holeDiaOverride !== null) ? state.loads.holeDiaOverride : null;
+  } else {
+    dh = lookupClearanceHoleDia(state, b);
   }
 
-  // BCs + nodes drawn on top
-  for(const n of Model.nodes) drawBCSymbol(n);
-
-  for(const n of Model.nodes){
-    const p=project3D(n.x,n.y,n.z);
-    ctx.save();
-    const isHovered=(View.hoveredNode===n.id);
-    const isPinned=(View.pinnedNode===n.id);
-    const radius=(isHovered||isPinned)?6:4.2;
-    ctx.beginPath(); ctx.arc(p.x,p.y,radius,0,Math.PI*2);
-    ctx.fillStyle = isPinned ? "rgba(251,191,36,0.9)" :
-                   isHovered? "rgba(59,130,246,0.9)" :
-                              "rgba(37,99,235,0.65)";
-    ctx.fill();
-    if(isHovered||isPinned){ ctx.strokeStyle="rgba(255,255,255,0.9)"; ctx.lineWidth=2; ctx.stroke(); }
-    ctx.restore();
+  // Fallback: if table has no row (e.g., a rare size), use a conservative default = normal ~= d + 0.06d (very rough)
+  if(!(dh>0)){
+    dh = state.units === "metric" ? (b.d + 1.0) : (b.d + 0.0625);
   }
 
-  // local triad for hovered/pinned element
-  drawLocalTriadForSelectedElem();
+  const Lsh = clamp(state.geom.Lshank, 0, Lg);
+  const Lth = Math.max(0, Lg - Lsh);
+
+  return { Lg, tHW, tNW, tMembers, Db_top, Db_bot, dh, Lsh, Lth };
 }
 
-/* =========================
-   Math helpers
-   ========================= */
-function build3DTransformationMatrix(ni, nj, x3, y3, z3){
-  const dx = nj.x - ni.x, dy = nj.y - ni.y, dz = nj.z - ni.z;
-  const L = Math.hypot(dx,dy,dz);
-  if(L < 1e-12) throw new Error("Zero-length element");
+function calcBoltStiffness(state, geom){
+  const b = state.bolt.data;
+  const E = state.bolt.E;
+  if(!b || !geom) return null;
 
-  const xx = dx/L, xy = dy/L, xz = dz/L;
+  const d = b.d;
+  const A_shank = Math.PI * d*d / 4;
 
-  const vx = x3 - ni.x, vy = y3 - ni.y, vz = z3 - ni.z;
-  const dot = vx*xx + vy*xy + vz*xz;
+  const At = b.At;
+  const eta = (state?.bolt?.etaThread != null) ? state.bolt.etaThread : 0.90;
+  const At_eff = eta * At;
 
-  const vzx = vx - dot*xx, vzy = vy - dot*xy, vzz = vz - dot*xz;
-  const vzLen = Math.hypot(vzx,vzy,vzz);
-  if(vzLen < 1e-12) throw new Error("Orientation point collinear with element axis");
+  const comp = (geom.Lsh)/(A_shank*E) + (geom.Lth)/(At_eff*E);
+  const kb = comp > 0 ? 1/comp : Infinity;
 
-  const zx = vzx/vzLen, zy = vzy/vzLen, zz = vzz/vzLen;
-
-  const yx = zy*xz - zz*xy;
-  const yy = zz*xx - zx*xz;
-  const yz = zx*xy - zy*xx;
-
-  const R = [
-    [xx, xy, xz],
-    [yx, yy, yz],
-    [zx, zy, zz]
-  ];
-
-  const T = Array.from({length:12}, ()=> new Float64Array(12));
-  for(let block=0; block<4; block++){
-    const off=block*3;
-    for(let i=0;i<3;i++){
-      for(let j=0;j<3;j++){
-        T[off+i][off+j] = R[i][j];
-      }
-    }
-  }
-  return T; // uL = T*uG
+  return { kb, A_shank, At, eta, At_eff };
 }
 
-/* =========================
-   12x12 Local Stiffness (space frame)
-   ========================= */
-function elementLocalStiffness3D(E, G, A, Izz, Iyy, J, L){
-  const EA_L = (E*A)/L;
-  const GJ_L = (G*J)/L;
+function calcMemberStiffnessShigley(state, geom){
+  const isImp = state.units === "imperial";
+  const alpha = (state.geom.frustumAngleDeg || 30) * Math.PI/180;
+  const tanA  = Math.tan(alpha);
+  const dh    = geom.dh;
 
-  const EIyy = E*Iyy, EIzz = E*Izz;
+  const layers = [];
+  if(state.geom.useHeadWasher && geom.tHW > 0){
+    layers.push(makeLayer(state.geom.tHeadWasher, state.geom.matHeadWasher, null, isImp, "Head washer"));
+  }
+  state.geom.members.forEach((m,i)=>{
+    layers.push(makeLayer(m.t, m.matKey, m.extra, isImp, `Member ${i+1}`));
+  });
+  if(state.geom.useNutWasher && geom.tNW > 0){
+    layers.push(makeLayer(state.geom.tNutWasher, state.geom.matNutWasher, null, isImp, "Nut washer"));
+  }
 
-  const EIyy_L3 = EIyy/(L*L*L), EIyy_L2 = EIyy/(L*L), EIyy_L = EIyy/L;
-  const EIzz_L3 = EIzz/(L*L*L), EIzz_L2 = EIzz/(L*L), EIzz_L = EIzz/L;
+  const Lg = geom.Lg;
+  const half = 0.5*Lg;
 
-  const k = Array.from({length:12}, ()=> new Float64Array(12));
+  const topRes = complianceHalf_FromTop(layers, half, geom.Db_top, dh, tanA);
+  const botRes = complianceHalf_FromBottom(layers, half, geom.Db_bot, dh, tanA);
 
-  // axial
-  k[0][0]=EA_L; k[0][6]=-EA_L;
-  k[6][0]=-EA_L; k[6][6]=EA_L;
+  const comp = topRes.comp + botRes.comp;
+  const km = comp > 0 ? 1/comp : Infinity;
 
-  // torsion
-  k[3][3]=GJ_L; k[3][9]=-GJ_L;
-  k[9][3]=-GJ_L; k[9][9]=GJ_L;
-
-  // bending: y disp + z-rot uses EIzz
-  k[1][1] = 12*EIzz_L3;   k[1][5] = 6*EIzz_L2;    k[1][7] = -12*EIzz_L3;  k[1][11]= 6*EIzz_L2;
-  k[5][1] = 6*EIzz_L2;    k[5][5] = 4*EIzz_L;     k[5][7] = -6*EIzz_L2;   k[5][11]= 2*EIzz_L;
-  k[7][1] = -12*EIzz_L3;  k[7][5] = -6*EIzz_L2;   k[7][7] = 12*EIzz_L3;   k[7][11]= -6*EIzz_L2;
-  k[11][1]= 6*EIzz_L2;    k[11][5]= 2*EIzz_L;     k[11][7]= -6*EIzz_L2;   k[11][11]= 4*EIzz_L;
-
-  // bending: z disp + y-rot uses EIyy
-  k[2][2] = 12*EIyy_L3;   k[2][4] = -6*EIyy_L2;   k[2][8] = -12*EIyy_L3;  k[2][10]= -6*EIyy_L2;
-  k[4][2] = -6*EIyy_L2;   k[4][4] = 4*EIyy_L;     k[4][8] = 6*EIyy_L2;    k[4][10]= 2*EIyy_L;
-  k[8][2] = -12*EIyy_L3;  k[8][4] = 6*EIyy_L2;    k[8][8] = 12*EIyy_L3;   k[8][10]= 6*EIyy_L2;
-  k[10][2]= -6*EIyy_L2;   k[10][4]= 2*EIyy_L;     k[10][8]= 6*EIyy_L2;    k[10][10]= 4*EIyy_L;
-
-  return k;
+  return { km, compliance: comp, comp_top: topRes.comp, comp_bot: botRes.comp, Dmid_top: topRes.Dend, Dmid_bot: botRes.Dend };
 }
 
-/* =========================
-   12x12 Consistent Mass (Euler–Bernoulli space frame)
-   ========================= */
-function elementLocalMass3D(rho, A, Izz, Iyy, J, L){
-  const m = rho*A*L; // total mass
-  const M = Array.from({length:12}, ()=> new Float64Array(12));
+function makeLayer(t, matKey, extra, isImp, name){
+  const mat = MATERIALS.find(x=>x.key===matKey) || {};
+  const layer = { name, t: Number(t||0), matKey, kind: "E", E: null, k: null };
+  if(layer.t <= 0) return layer;
 
-  const ma = m/6;
-  M[0][0] += 2*ma; M[0][6] += 1*ma;
-  M[6][0] += 1*ma; M[6][6] += 2*ma;
-
-  const mt = (rho*J*L)/6;
-  M[3][3] += 2*mt; M[3][9] += 1*mt;
-  M[9][3] += 1*mt; M[9][9] += 2*mt;
-
-  const c = m/420;
-  const L2 = L*L;
-
-  const mapY = [1,5,7,11];
-  const My = [
-    [156, 22*L, 54,  -13*L],
-    [22*L, 4*L2, 13*L, -3*L2],
-    [54,  13*L, 156, -22*L],
-    [-13*L, -3*L2, -22*L, 4*L2]
-  ];
-  for(let i=0;i<4;i++){
-    for(let j=0;j<4;j++){
-      M[mapY[i]][mapY[j]] += c*My[i][j];
-    }
+  if(mat.needsK){
+    layer.kind = "k";
+    layer.k = (extra!==null && isFinite(extra) && extra>0) ? Number(extra) : null;
+    return layer;
   }
 
-  const mapZ = [2,4,8,10];
-  const Mz = [
-    [156, -22*L, 54,   13*L],
-    [-22*L, 4*L2, -13*L, -3*L2],
-    [54,  -13*L, 156,  22*L],
-    [13*L, -3*L2, 22*L, 4*L2]
-  ];
-  for(let i=0;i<4;i++){
-    for(let j=0;j<4;j++){
-      M[mapZ[i]][mapZ[j]] += c*Mz[i][j];
-    }
+  layer.kind = "E";
+  if(mat.needsE){
+    layer.E = (extra!==null && isFinite(extra) && extra>0) ? Number(extra) : null;
+  } else {
+    layer.E = materialE(matKey, isImp);
   }
-
-  return M;
+  return layer;
 }
 
-/* =========================
-   BC condensation
-   ========================= */
-function buildBcByDof(){
-  const nodesSorted = [...Model.nodes].slice().sort((a,b)=>a.id-b.id);
-  Model.nodeIndexById = new Map(nodesSorted.map((n,i)=>[n.id,i]));
+function complianceHalf_FromTop(layers, half, Db, dh, tanA){
+  let depth = 0;
+  let comp = 0;
 
-  const ndof = 6*nodesSorted.length;
-  const bcByDof = Array(ndof).fill(null);
+  for(const L of layers){
+    if(depth >= half) break;
+    const t = L.t || 0;
+    if(t <= 0) continue;
 
-  for(let i=0;i<nodesSorted.length;i++){
-    const n = nodesSorted[i];
-    const base = 6*i;
-    if(n.ux.prescribed) bcByDof[base+0]=n.ux.value;
-    if(n.uy.prescribed) bcByDof[base+1]=n.uy.value;
-    if(n.uz.prescribed) bcByDof[base+2]=n.uz.value;
-    if(n.rx.prescribed) bcByDof[base+3]=n.rx.value;
-    if(n.ry.prescribed) bcByDof[base+4]=n.ry.value;
-    if(n.rz.prescribed) bcByDof[base+5]=n.rz.value;
-  }
-  return {bcByDof, nodesSorted};
-}
-
-/* =========================
-   Assemble [K] and [M]
-   ========================= */
-function assembleKM(){
-  const {bcByDof, nodesSorted} = buildBcByDof();
-  const N = nodesSorted.length;
-  const ndof = 6*N;
-
-  const K = Array.from({length:ndof}, ()=> new Float64Array(ndof));
-  const M = Array.from({length:ndof}, ()=> new Float64Array(ndof));
-
-  for(const e of Model.elems){
-    const ni = Model.nodeById.get(e.ni);
-    const nj = Model.nodeById.get(e.nj);
-    if(!ni||!nj) continue;
-
-    const iIdx = Model.nodeIndexById.get(ni.id);
-    const jIdx = Model.nodeIndexById.get(nj.id);
-
-    const dx=nj.x-ni.x, dy=nj.y-ni.y, dz=nj.z-ni.z;
-    const L = Math.hypot(dx,dy,dz);
-    if(!(L>0)) throw new Error(`Zero-length element ${e.id}`);
-
-    const dofs = [
-      6*iIdx+0, 6*iIdx+1, 6*iIdx+2, 6*iIdx+3, 6*iIdx+4, 6*iIdx+5,
-      6*jIdx+0, 6*jIdx+1, 6*jIdx+2, 6*jIdx+3, 6*jIdx+4, 6*jIdx+5
-    ];
-
-    const kL = elementLocalStiffness3D(e.E, e.G, e.Ayz, e.Izz, e.Iyy, e.Jyz, L);
-    const mL = elementLocalMass3D(e.rho||0, e.Ayz, e.Izz, e.Iyy, e.Jyz, L);
-
-    const T = build3DTransformationMatrix(ni, nj, e.x3, e.y3, e.z3);
-
-    const tmpK = Array.from({length:12}, ()=> new Float64Array(12));
-    const tmpM = Array.from({length:12}, ()=> new Float64Array(12));
-
-    for(let i=0;i<12;i++){
-      for(let j=0;j<12;j++){
-        let sK=0, sM=0;
-        for(let m=0;m<12;m++){
-          sK += kL[i][m]*T[m][j];
-          sM += mL[i][m]*T[m][j];
-        }
-        tmpK[i][j]=sK;
-        tmpM[i][j]=sM;
-      }
-    }
-
-    const kG = Array.from({length:12}, ()=> new Float64Array(12));
-    const mG = Array.from({length:12}, ()=> new Float64Array(12));
-
-    for(let i=0;i<12;i++){
-      for(let j=0;j<12;j++){
-        let sK=0, sM=0;
-        for(let m=0;m<12;m++){
-          sK += T[m][i]*tmpK[m][j];
-          sM += T[m][i]*tmpM[m][j];
-        }
-        kG[i][j]=sK;
-        mG[i][j]=sM;
-      }
-    }
-
-    for(let a=0;a<12;a++){
-      const I = dofs[a];
-      const Kr = K[I];
-      const Mr = M[I];
-      for(let b=0;b<12;b++){
-        const J = dofs[b];
-        Kr[J] += kG[a][b];
-        Mr[J] += mG[a][b];
-      }
-    }
-  }
-
-  const g = getGravity();
-  for(let i=0;i<N;i++){
-    const n = nodesSorted[i];
-    const m = (n.W||0)/g;
-    if(m>0){
-      M[6*i+0][6*i+0] += m;
-      M[6*i+1][6*i+1] += m;
-      M[6*i+2][6*i+2] += m;
-    }
-  }
-
-  return {K, M, bcByDof, nodesSorted, ndof};
-}
-
-/* =========================
-   Extract free DOFs and solve generalized eigenproblem
-   ========================= */
-function solveFirst3Modes(){
-  const {K, M, bcByDof, ndof} = assembleKM();
-
-  const free = [];
-  for(let i=0;i<ndof;i++){
-    const v = bcByDof[i];
-    if(v === null || v === undefined) free.push(i);
-  }
-  if(free.length===0) throw new Error("All DOFs prescribed; no modal DOFs.");
-
-  const Kff = Array.from({length:free.length}, ()=> Array(free.length).fill(0));
-  const Mff = Array.from({length:free.length}, ()=> Array(free.length).fill(0));
-
-  for(let a=0;a<free.length;a++){
-    const I = free[a];
-    for(let b=0;b<free.length;b++){
-      const J = free[b];
-      Kff[a][b] = K[I][J];
-      Mff[a][b] = M[I][J];
-    }
-  }
-
-  const Minv = numeric.inv(Mff);
-  const A = numeric.dot(Minv, Kff);
-
-  const eig = numeric.eig(A);
-  const lam = eig.lambda.x;
-  const V = eig.E.x;
-
-  const modes = [];
-  for(let i=0;i<lam.length;i++){
-    const li = lam[i];
-    if(!Number.isFinite(li) || li<=1e-10) continue;
-    modes.push({lambda: li, vec: V.map(row => row[i])});
-  }
-  if(modes.length===0) throw new Error("No positive eigenvalues found (check constraints/mass).");
-
-  modes.sort((a,b)=>a.lambda-b.lambda);
-
-  const take = modes.slice(0,3);
-
-  const fullModes = [];
-  const freqHz = [];
-  for(const m of take){
-    const omega = Math.sqrt(m.lambda);
-    const f = omega/(2*Math.PI);
-    freqHz.push(f);
-
-    const U = new Float64Array(ndof);
-    for(let k=0;k<free.length;k++){
-      U[free[k]] = m.vec[k];
-    }
-
-    let maxT = 0;
-    for(let i=0;i<ndof/6;i++){
-      const ux=U[6*i+0], uy=U[6*i+1], uz=U[6*i+2];
-      maxT = Math.max(maxT, Math.hypot(ux,uy,uz));
-    }
-    if(maxT>0){
-      for(let i=0;i<ndof;i++) U[i] /= maxT;
-    }
-    fullModes.push(U);
-  }
-
-  return {freqHz, modes: fullModes, meta:{ndof, nFree: free.length, free} };
-}
-
-/* =========================
-   Selection info panels
-   ========================= */
-function fmtDOF(d, name){ return d.prescribed ? `${name}=${d.value}` : `${name}=free`; }
-
-function showNodeInfo(node){
-  const lines = [];
-  lines.push(`NODE ${node.id}`);
-  lines.push(`  xyz = (${node.x}, ${node.y}, ${node.z})`);
-  lines.push(`  BCs: ${fmtDOF(node.ux,"Ux")}, ${fmtDOF(node.uy,"Uy")}, ${fmtDOF(node.uz,"Uz")}, ${fmtDOF(node.rx,"Rx")}, ${fmtDOF(node.ry,"Ry")}, ${fmtDOF(node.rz,"Rz")}`);
-  lines.push(`  W = ${Number(node.W||0)}`);
-
-  if(Model.lastModes){
-    const mi = Number(el.modeSelect.value||0);
-    const idx = Model.nodeIndexById.get(node.id);
-    if(idx!=null){
-      const U = Model.lastModes.modes[mi];
-      const ux = U[6*idx+0], uy = U[6*idx+1], uz = U[6*idx+2];
-      const rx = U[6*idx+3], ry = U[6*idx+4], rz = U[6*idx+5];
-      lines.push(`  Mode ${mi+1} φ @ node:`);
-      lines.push(`    (ux,uy,uz) = (${ux.toExponential(3)}, ${uy.toExponential(3)}, ${uz.toExponential(3)})`);
-      lines.push(`    (rx,ry,rz) = (${rx.toExponential(3)}, ${ry.toExponential(3)}, ${rz.toExponential(3)})`);
-    }
-  }
-  el.selInfo.textContent = lines.join("\n");
-}
-
-function showElemInfo(e){
-  const ni=Model.nodeById.get(e.ni), nj=Model.nodeById.get(e.nj);
-  let L = NaN;
-  if(ni && nj) L = Math.hypot(nj.x-ni.x, nj.y-ni.y, nj.z-ni.z);
-
-  const lines = [];
-  lines.push(`SEGMENT ${e.id}: ${e.ni} → ${e.nj}`);
-  lines.push(`  L = ${Number.isFinite(L) ? L.toFixed(6) : "?"}`);
-  lines.push(`  E=${e.E}, G=${e.G}`);
-  lines.push(`  Izz=${e.Izz}, Iyy=${e.Iyy}, J=${e.Jyz}, A=${e.Ayz}, rho=${e.rho||0}`);
-  lines.push(`  x3/y3/z3 = (${e.x3}, ${e.y3}, ${e.z3})`);
-  if(ni && nj){
-    const basis = localAxesFromElem(ni,nj,e);
-    if(basis.ok){
-      lines.push(`  local axes (global):`);
-      lines.push(`    x̂=(${basis.xhat.x.toFixed(4)}, ${basis.xhat.y.toFixed(4)}, ${basis.xhat.z.toFixed(4)})`);
-      lines.push(`    ŷ=(${basis.yhat.x.toFixed(4)}, ${basis.yhat.y.toFixed(4)}, ${basis.yhat.z.toFixed(4)})`);
-      lines.push(`    ẑ=(${basis.zhat.x.toFixed(4)}, ${basis.zhat.y.toFixed(4)}, ${basis.zhat.z.toFixed(4)})`);
+    const seg = Math.min(t, half - depth);
+    if(L.kind === "k"){
+      const kFull = L.k;
+      comp += (kFull && kFull>0) ? (seg/t)*(1/kFull) : 1e6*(seg/t);
     } else {
-      lines.push(`  ⚠ ${basis.warn}`);
+      const E = L.E;
+      if(E && E>0){
+        const x0 = depth;
+        const x1 = depth + seg;
+        const D0 = Db + 2*x0*tanA;
+        const D1 = Db + 2*x1*tanA;
+        comp += frustumCompliance(E, dh, D0, D1, tanA);
+      }
     }
+    depth += seg;
   }
-  el.selInfo.textContent = lines.join("\n");
+
+  const Dend = Db + 2*half*tanA;
+  return { comp, Dend };
 }
 
-/* =========================
-   UI wiring
-   ========================= */
+function complianceHalf_FromBottom(layers, half, Db, dh, tanA){
+  let depth = 0;
+  let comp = 0;
 
+  for(let idx=layers.length-1; idx>=0; idx--){
+    if(depth >= half) break;
+    const L = layers[idx];
+    const t = L.t || 0;
+    if(t <= 0) continue;
 
-function syncFromTextareas(resetView=true){
-  const nodes = parseNodes(el.taNodes.value||"");
-  const elems = parseElems(el.taElems.value||"");
-  installNodes(nodes, { resetView });
-  installElems(elems, { resetView });
-  updateButtons();
+    const seg = Math.min(t, half - depth);
+    if(L.kind === "k"){
+      const kFull = L.k;
+      comp += (kFull && kFull>0) ? (seg/t)*(1/kFull) : 1e6*(seg/t);
+    } else {
+      const E = L.E;
+      if(E && E>0){
+        const x0 = depth;
+        const x1 = depth + seg;
+        const D0 = Db + 2*x0*tanA;
+        const D1 = Db + 2*x1*tanA;
+        comp += frustumCompliance(E, dh, D0, D1, tanA);
+      }
+    }
+    depth += seg;
+  }
+
+  const Dend = Db + 2*half*tanA;
+  return { comp, Dend };
 }
 
-el.btnResetNodes.addEventListener('click', ()=>{
-  el.taNodes.value = DEFAULT_NODES_TEXT;
-  logClear(); logLine("OK: Nodes reset.", "log-ok");
-  try{ syncFromTextareas(); } catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); }
-});
-el.btnResetElems.addEventListener('click', ()=>{
-  el.taElems.value = DEFAULT_ELEMS_TEXT;
-  logClear(); logLine("OK: Segments reset.", "log-ok");
-  try{ syncFromTextareas(); } catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); }
-});
-el.btnUseNodes.addEventListener('click', ()=>{
-  logClear(); setStatus("Parsing nodes...");
-  try{
-    const nodes=parseNodes(el.taNodes.value||"");
-    installNodes(nodes);
-    updateButtons();
-    logLine("OK: Nodes parsed/installed.", "log-ok");
-  }catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); }
-  setStatus("Idle");
-});
-el.btnUseElems.addEventListener('click', ()=>{
-  logClear(); setStatus("Parsing segments...");
-  try{
-    const elems=parseElems(el.taElems.value||"");
-    installElems(elems);
-    updateButtons();
-    logLine("OK: Segments parsed/installed.", "log-ok");
-  }catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); }
-  setStatus("Idle");
-});
+function frustumCompliance(E, dh, D0, D1, tanA){
+  if(!(E>0) || !(tanA>0) || !(D0>0) || !(D1>0)) return 0;
 
-el.btnDraw.addEventListener('click', ()=>{
-  logClear(); setStatus("Validating...");
-  try{ syncFromTextareas(); }catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); setStatus("Fix input"); return; }
-  if(!crossValidate()){ setStatus("Fix input"); return; }
-  View.isInteractive=true;
-  fitView3D(Model.nodes);
-  Model.isDrawn=true;
-  requestRedraw();
-  setStatus("Interactive");
-  logLine("OK: Frame drawn.", "log-ok");
-});
+  let a0 = D0, a1 = D1;
+  if(a1 < a0){ const tmp=a0; a0=a1; a1=tmp; }
 
-el.btnSolveModes.addEventListener('click', ()=>{
-  logClear(); setStatus("Validating...");
-  try{ syncFromTextareas(false); } // << preserve Model.isDrawn + pins
-  catch(e){ logLine(`ERROR: ${e.message}`, "log-err"); setStatus("Fix input"); return; }
-  if(!crossValidate()){ setStatus("Fix input"); return; }
-
-  try{
-    setStatus("Assembling & solving modes...");
-    const res = solveFirst3Modes();
-    Model.lastModes = res;
-
-    logLine(`OK: Modes solved. Free DOF = ${res.meta.nFree} / ndof=${res.meta.ndof}`, "log-ok");
-    for(let i=0;i<res.freqHz.length;i++){
-      logLine(`Mode ${i+1}: f = ${res.freqHz[i].toFixed(4)} Hz`, "log-ok");
-    }
-
-    el.modeSelect.disabled=false;
-    el.btnToggleAnim.disabled=false;
-    el.amp.disabled=false;
-    el.speed.disabled=false;
-
-    // Ensure we are drawable/clickable even if user never pressed Draw
-    View.isInteractive = true;
-    Model.isDrawn = true;
-
-    renderSummary();
-    setStatus("Solved (select mode / animate)");
-    requestRedraw();
-  }catch(e){
-    logLine(`ERROR: ${e.message}`, "log-err");
-    setStatus("Solve failed");
+  const eps = 1e-12;
+  if(dh <= eps){
+    return (2/(E*Math.PI*tanA)) * ( (1/a0) - (1/a1) );
   }
-});
 
-el.btnExportJSON.addEventListener("click", ()=>{
-  logClear();
-  try{
-    const state = snapshotFromTextareas();
-    const payload = {
-      app: "3D Frame Modal Analysis (Modes 1–3)",
-      version: "json-v1",
-      exportedAt: new Date().toISOString(),
-      units: state.units,
-      g: state.g,
-      nodes: state.nodes,
-      elems: state.elems
+  const safe = (D)=> Math.max(D, dh + 1e-9);
+  const D0s = safe(a0);
+  const D1s = safe(a1);
+
+  const term = Math.log( ((D1s - dh)/(D1s + dh)) / ((D0s - dh)/(D0s + dh)) );
+  return (1/(E*Math.PI*dh*tanA)) * term;
+}
+
+function calcPreloadBoundsThreadBearing(state, geom){
+  const b = state.bolt.data;
+  if(!b) return null;
+
+  const T = state.loads.T;
+  const tol = state.loads.TtolPct;
+  const Tmin = T*(1 - tol);
+  const Tmax = T*(1 + tol);
+
+  const D_outer = (state.loads.torqueAt === "head") ? geom.Db_top : geom.Db_bot;
+  const D_inner = geom.dh;
+  const Db_eff  = 0.5*(D_outer + D_inner);
+
+  const Fmin = torqueToPreloadThreadBearing(Tmin, b, Db_eff, state.loads.muTmax, state.loads.muBmax);
+  const Fmax = torqueToPreloadThreadBearing(Tmax, b, Db_eff, state.loads.muTmin, state.loads.muBmin);
+
+  return { Tmin, Tmax, Db_eff, Fmin, Fmax };
+}
+
+function torqueToPreloadThreadBearing(T, bolt, Db_eff, mu_t, mu_b){
+  if(!(T>=0) || !bolt) return null;
+
+  const d2 = bolt.d2;
+  const pitch = bolt.pitch;
+  if(!(d2>0) || !(pitch>0) || !(Db_eff>0)) return null;
+
+  const alpha = 30 * Math.PI/180;
+  const secA  = 1/Math.cos(alpha);
+
+  const lambda = Math.atan( pitch / (Math.PI*d2) );
+  const phi = Math.atan( mu_t * secA );
+
+  const threadTerm = (d2/2) * Math.tan(lambda + phi);
+  const bearTerm   = mu_b * (Db_eff/2);
+  const denom = threadTerm + bearTerm;
+  if(!(denom>0)) return null;
+
+  return T / denom;
+}
+
+function calcProofLoad(state){
+  const b = state.bolt.data;
+  const g = state.bolt.grade;
+  if(!b || !g) return null;
+
+  if(state.units === "imperial"){
+    const Sp = g.Sp_imp || null;
+    return Sp ? Sp*b.At : null;
+  } else {
+    const Sp = g.Sp_met || null;
+    return Sp ? Sp*b.At : null;
+  }
+}
+
+/* ============================================================
+   Solver + output
+   ============================================================ */
+function runSolveForCurrentSelection(){
+  const state = readState();
+  const ev = evaluateCurrentBolt(state);
+
+  if(!ev.geom){
+    setStatus("No bolt selected", "err");
+    return;
+  }
+
+  let status = "OK";
+  let cls = "ok";
+  if(ev.sepMargin!=null && ev.sepMargin < 0){ status = "Separates"; cls="err"; }
+  else if(ev.proofMargin!=null && ev.proofMargin < 0){ status = "Over proof"; cls="err"; }
+  else if(ev.sepMargin!=null && ev.sepMargin < 0.05*Math.max(1, ev.sepReq||1)){ status = "Low sep margin"; cls="warn"; }
+  setStatus(status, cls);
+
+  const u = state.u;
+  const rows = [
+    ["Grip length Lg", `${fmt(ev.geom.Lg)} ${u.L}`],
+    ["Shank in grip Lsh", `${fmt(ev.geom.Lsh)} ${u.L}`],
+    ["Thread in grip Lth", `${fmt(ev.geom.Lth)} ${u.L}`],
+
+    ["Clearance hole dia dh", `${fmt(ev.geom.dh)} ${u.L}`],
+    ["Hole fit", state.loads.holeFit],
+
+    ["Torque applied at", state.loads.torqueAt === "head" ? "Head" : "Nut"],
+    ["Effective bearing dia Db_eff", `${fmt(ev.preload?.Db_eff)} ${u.L}`],
+
+    ["Shank area As", `${fmt(ev.kbOut?.A_shank)} ${u.L}²`],
+    ["Tensile stress area At", `${fmt(ev.kbOut?.At)} ${u.L}²`],
+    ["Thread compliance η", `${fmt(ev.kbOut?.eta,3)}`],
+    ["Effective thread area η·At", `${fmt(ev.kbOut?.At_eff)} ${u.L}²`],
+
+    ["Bolt stiffness kb", `${fmt(ev.kbOut?.kb)} ${u.F}/${u.L}`],
+    ["Member stiffness km (Shigley)", `${fmt(ev.kmOut?.km)} ${u.F}/${u.L}`],
+    ["Load fraction C", `${fmt(ev.C,5)}`],
+
+    ["Torque Tmin", `${fmt(ev.preload?.Tmin)} ${u.T}`],
+    ["Torque Tmax", `${fmt(ev.preload?.Tmax)} ${u.T}`],
+    ["Preload Fi,min", `${fmt(ev.preload?.Fmin)} ${u.F}`],
+    ["Preload Fi,max", `${fmt(ev.preload?.Fmax)} ${u.F}`],
+
+    ["Separation requirement (1−C)P", `${fmt(ev.sepReq)} ${u.F}`],
+    ["Separation margin", `${fmt(ev.sepMargin)} ${u.F}`],
+
+    ["Proof load Fproof", `${fmt(ev.Fproof)} ${u.F}`],
+    ["Max bolt load Fi,max + C·P", `${fmt(ev.FbMax)} ${u.F}`],
+    ["Proof margin", `${fmt(ev.proofMargin)} ${u.F}`]
+  ];
+  renderSummary(rows);
+
+  drawJoint(state, ev.geom);
+}
+
+function renderSummary(rows){
+  const tbody = $("summaryTable").querySelector("tbody");
+  tbody.innerHTML = "";
+  for(const [k,v] of rows){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function setStatus(text, level){
+  const pill = $("statusPill");
+  pill.textContent = text;
+  pill.className = "pill";
+  if(level==="ok") pill.classList.add("status-ok");
+  if(level==="warn") pill.classList.add("status-warn");
+  if(level==="err") pill.classList.add("status-err");
+}
+
+function updateRightPills(){
+  const isImp = $("isImperial").checked;
+  const fam = $("boltFamily").value;
+  const familyName = (BOLT_FAMILIES[isImp?"imperial":"metric"].find(x=>x.key===fam)?.name) || fam;
+
+  const series = $("threadSeries").value;
+  const sizeIdx = Number($("boltSize").value || 0);
+  const bolt = (BOLTS[fam] && BOLTS[fam][series]) ? BOLTS[fam][series][sizeIdx] : null;
+
+  $("unitsPill").textContent = isImp ? "Imperial" : "Metric";
+  $("familyPill").textContent = familyName;
+  $("sizePill").textContent = bolt ? bolt.label : "—";
+}
+
+/* ============================================================
+   Drawing
+   ============================================================ */
+function clipPlateMinusHole(ctx, x, y, w, h, holeX, holeW){
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.rect(holeX, y, holeW, h);
+  ctx.clip("evenodd");
+}
+
+function drawJoint(state, geom){
+  const c = $("jointCanvas");
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0,0,c.width,c.height);
+
+  const pad = 55;
+  const W = c.width, H = c.height;
+  const cx = W*0.5;
+
+  const b = state.bolt.data;
+  if(!b || !geom) return;
+
+  // Small protrusion beyond nut for realism (Shigley-style)
+  const protrudeL = Math.max(0.25 * b.d, 2 * b.pitch); // in or mm
+
+  const headH = b.headH, nutH = b.nutH;
+  const stackH = geom.Lg;
+  const totalH = headH + stackH + nutH + protrudeL;
+
+  const topY = pad;
+  const botY = H - pad;
+  const availH = botY - topY;
+
+  const maxD = Math.max(b.headD, b.nutD, geom.Db_top, geom.Db_bot, b.d);
+  const availX = W - 2*pad;
+
+  const sY = totalH > 0 ? (availH / totalH) : 1;
+  const sX = maxD > 0 ? (0.58*availX / maxD) : 1;
+  const s  = Math.min(sX, sY);
+
+  const Dpx = D => D*s;
+  const Lpx = L => L*s;
+
+  const yHeadTop  = topY;
+  const yHeadBot  = yHeadTop + Lpx(headH);
+  const yStackTop = yHeadBot;
+  const yStackBot = yStackTop + Lpx(stackH);
+  const yNutTop   = yStackBot;
+  const yNutBot   = yNutTop + Lpx(nutH);
+  const yBoltEnd  = yNutBot + Lpx(protrudeL);
+
+  const plateHalfW = Math.max(Dpx(maxD)*1.15, (W-2*pad)*0.38);
+  const holeW = Dpx(geom.dh);
+
+  const shankW  = Dpx(b.d);
+  const threadW = Dpx(b.d2);
+
+  const yThreadStart = yStackTop + Lpx(geom.Lsh);
+  const yThreadEnd   = yBoltEnd; // show threads through nut & protrusion
+
+  const layers = [];
+  if (state.geom.useHeadWasher && geom.tHW > 0) layers.push({ t: state.geom.tHeadWasher, kind: "washer", od: geom.Db_top });
+  state.geom.members.forEach((m,i)=> layers.push({ t: m.t, kind: "member", hatchDir: (i%2===0?1:-1) }));
+  if (state.geom.useNutWasher && geom.tNW > 0) layers.push({ t: state.geom.tNutWasher, kind: "washer", od: geom.Db_bot });
+
+  let y = yStackTop;
+  for(const L of layers){
+    const h = Lpx(L.t);
+    if(h <= 0) continue;
+
+    ctx.save();
+    ctx.fillStyle = (L.kind==="washer") ? "#eef2f7" : "#f7f7f7";
+    ctx.strokeStyle = "#4b5563";
+    ctx.lineWidth = 1;
+
+    // Option A: washers only to OD width; members full width
+    const halfW = (L.kind === "washer" && L.od) ? (Dpx(L.od) / 2) : plateHalfW;
+
+    const x0 = cx - halfW;
+    const w0 = 2*halfW;
+    const holeX = cx - holeW/2;
+
+    ctx.beginPath();
+    ctx.rect(x0, y, w0, h);
+    ctx.rect(holeX, y, holeW, h);
+    ctx.fill("evenodd");
+    ctx.stroke();
+
+    if(L.kind === "member"){
+      ctx.save();
+      clipPlateMinusHole(ctx, x0, y, w0, h, holeX, holeW);
+      hatchRect(ctx, x0, y, w0, h, L.hatchDir, 10, "#9ca3af");
+      ctx.restore();
+    }
+    ctx.restore();
+    y += h;
+  }
+
+  // bolt shank
+  ctx.save();
+  ctx.fillStyle = "#d6a3a8";
+  ctx.strokeStyle = "#7c2d32";
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.rect(cx - shankW/2, yHeadTop + 2, shankW, (yBoltEnd - yHeadTop) - 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // threads hatch
+  ctx.save();
+  ctx.strokeStyle = "#7c2d32";
+  ctx.lineWidth = 1;
+  const xL = cx - threadW/2;
+  const xR = cx + threadW/2;
+  for(let yy=yThreadStart; yy<yThreadEnd; yy+=9){
+    ctx.beginPath();
+    ctx.moveTo(xL, yy);
+    ctx.lineTo(xR, yy+9);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // thread start marker + Lsh/Lth brackets
+  drawThreadStartMarker(ctx, cx, yThreadStart, shankW);
+
+  const xDim = cx + plateHalfW*0.82;
+  drawDimBracket(ctx, xDim, yStackTop,    yThreadStart, `Lsh = ${fmt(geom.Lsh)} ${state.u.L}`);
+  drawDimBracket(ctx, xDim, yThreadStart, yStackBot,    `Lth = ${fmt(geom.Lth)} ${state.u.L}`);
+
+  // head + nut (professional-ish flats)
+  ctx.save();
+  ctx.fillStyle = "#c78f95";
+  ctx.strokeStyle = "#7c2d32";
+  ctx.lineWidth = 1.25;
+  drawHexFlatBlock(ctx, cx, yHeadTop, Dpx(b.headD), Lpx(headH));
+  drawHexFlatBlock(ctx, cx, yNutTop,  Dpx(b.nutD),  Lpx(nutH));
+  ctx.restore();
+
+  // washers / bearing faces
+  if(state.geom.useHeadWasher){
+    drawRingWasher(ctx, cx, yStackTop, Dpx(geom.Db_top), holeW, Math.max(3, Lpx(state.geom.tHeadWasher)));
+  } else {
+    drawBearingFace(ctx, cx, yStackTop, Dpx(b.headD)*0.92, shankW);
+  }
+
+  if(state.geom.useNutWasher){
+    const yW = yStackBot - Math.max(3, Lpx(state.geom.tNutWasher));
+    drawRingWasher(ctx, cx, yW, Dpx(geom.Db_bot), holeW, Math.max(3, Lpx(state.geom.tNutWasher)));
+  } else {
+    drawBearingFace(ctx, cx, yStackBot-2, Dpx(b.nutD)*0.92, shankW);
+  }
+
+  // load arrows
+  const xA1 = cx - plateHalfW*0.72;
+  const xA2 = cx + plateHalfW*0.72;
+  drawArrow(ctx, xA1, yStackTop + 8, xA1, yStackTop - 55, "#111827");
+  drawArrow(ctx, xA2, yStackTop + 8, xA2, yStackTop - 55, "#111827");
+  drawArrow(ctx, xA1, yStackBot - 8, xA1, yStackBot + 55, "#111827");
+  drawArrow(ctx, xA2, yStackBot - 8, xA2, yStackBot + 55, "#111827");
+
+  ctx.save();
+  ctx.fillStyle = "#111827";
+  ctx.font = "16px system-ui";
+  ctx.fillText("P", xA1 - 10, yStackTop - 62);
+  ctx.fillText("P", xA2 - 10, yStackTop - 62);
+  ctx.fillText("P", xA1 - 10, yStackBot + 72);
+  ctx.fillText("P", xA2 - 10, yStackBot + 72);
+  ctx.restore();
+}
+
+// helpers
+function hatchRect(ctx, x, y, w, h, dir=1, step=10, color="#9ca3af"){
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(x,y,w,h);
+  ctx.clip();
+
+  const diag = Math.sqrt(w*w + h*h);
+  const ang = (dir>=0) ? Math.PI/4 : -Math.PI/4;
+
+  ctx.translate(x + w/2, y + h/2);
+  ctx.rotate(ang);
+
+  for(let t=-diag; t<=diag; t+=step){
+    ctx.beginPath();
+    ctx.moveTo(t, -diag);
+    ctx.lineTo(t,  diag);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHexFlatBlock(ctx, cx, yTop, w, h){
+  const x = cx - w/2;
+  const y = yTop;
+  const c = Math.min(w * 0.12, h * 0.18, 14);
+
+  ctx.beginPath();
+  ctx.moveTo(x + c, y);
+  ctx.lineTo(x + w - c, y);
+  ctx.lineTo(x + w, y + c);
+  ctx.lineTo(x + w, y + h - c);
+  ctx.lineTo(x + w - c, y + h);
+  ctx.lineTo(x + c, y + h);
+  ctx.lineTo(x, y + h - c);
+  ctx.lineTo(x, y + c);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w*0.18, y + h*0.12);
+  ctx.lineTo(x + w*0.18, y + h*0.88);
+  ctx.moveTo(x + w*0.82, y + h*0.12);
+  ctx.lineTo(x + w*0.82, y + h*0.88);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRingWasher(ctx, cx, yTop, ODpx, holeWpx, tpx){
+  ctx.save();
+  ctx.fillStyle = "#e5e7eb";
+  ctx.strokeStyle = "#4b5563";
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  ctx.rect(cx - ODpx/2, yTop, ODpx, tpx);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillRect(cx - holeWpx/2, yTop, holeWpx, tpx);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+function drawBearingFace(ctx, cx, yAt, faceW, holeW){
+  ctx.save();
+  ctx.strokeStyle = "#4b5563";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - faceW/2, yAt);
+  ctx.lineTo(cx - holeW/2, yAt);
+  ctx.moveTo(cx + holeW/2, yAt);
+  ctx.lineTo(cx + faceW/2, yAt);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawThreadStartMarker(ctx, cx, y, shankW, color="#111827"){
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.moveTo(cx - shankW*0.65, y);
+  ctx.lineTo(cx + shankW*0.65, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDimBracket(ctx, x, y0, y1, label, color="#111827"){
+  const top = Math.min(y0,y1), bot = Math.max(y0,y1);
+  const cap = 7;
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  ctx.moveTo(x, top);
+  ctx.lineTo(x, bot);
+  ctx.moveTo(x-cap, top);
+  ctx.lineTo(x+cap, top);
+  ctx.moveTo(x-cap, bot);
+  ctx.lineTo(x+cap, bot);
+  ctx.stroke();
+
+  ctx.font = "13px system-ui";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x + 10, (top+bot)/2);
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1,y1,x2,y2, color="#111827"){
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+
+  const ang = Math.atan2(y2-y1, x2-x1);
+  const head = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2 - head*Math.cos(ang - Math.PI/6), y2 - head*Math.sin(ang - Math.PI/6));
+  ctx.lineTo(x2 - head*Math.cos(ang + Math.PI/6), y2 - head*Math.sin(ang + Math.PI/6));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ============================================================
+   Event wiring
+   ============================================================ */
+function recalcAndDraw(runSolve){
+  updateRightPills();
+  const state = readState();
+  const geom = deriveGeometry(state);
+  if(geom) drawJoint(state, geom);
+  if(runSolve) runSolveForCurrentSelection();
+}
+
+function resetDefaults(){
+  $("isImperial").checked = true;
+
+  rebuildBoltFamilyOptions();
+  rebuildGradeOptions();
+  $("threadSeries").value = "coarse";
+  rebuildSizeOptions();
+
+  $("useHeadWasher").value = "yes";
+  $("tHeadWasher").value = "0.06";
+  $("odHeadWasher").value = "1.00";
+  $("matHeadWasher").value = "steel";
+
+  $("numMembers").value = "2";
+  buildMemberRows();
+
+  $("useNutWasher").value = "yes";
+  $("tNutWasher").value = "0.06";
+  $("odNutWasher").value = "1.00";
+  $("matNutWasher").value = "steel";
+
+  $("Lshank").value = "0.75";
+
+  $("Pext").value = "2000";
+  $("Ttarget").value = "120";
+  $("Ttol").value = "10";
+  $("muTmin").value = "0.12";
+  $("muTmax").value = "0.20";
+  $("muBmin").value = "0.12";
+  $("muBmax").value = "0.20";
+
+  $("holeFit").value = "normal";
+  $("holeDia").value = "";
+
+  $("proofLimit").value = "1.00";
+  $("frustumAngle").value = "30";
+  $("torqueAt").value = "nut";
+  $("etaThread").value = "0.90";
+  updateBoltEDefault();
+
+  setStatus("Ready", "ok");
+  recalcAndDraw(false);
+}
+
+/* ============================================================
+   Export/Import Functions
+   ============================================================ */
+
+function exportStateAsJSON() {
+  const state = readState();
+  
+  // Capture all input values for restoration
+  const exportData = {
+    version: "1.0",
+    timestamp: new Date().toISOString(),
+    units: {
+      isImperial: $("isImperial").checked
+    },
+    bolt: {
+      family: $("boltFamily").value,
+      threadSeries: $("threadSeries").value,
+      grade: $("boltGrade").value,
+      size: $("boltSize").value,
+      boltE: $("boltE").value,
+      etaThread: $("etaThread").value,
+      frustumAngle: $("frustumAngle").value
+    },
+    geometry: {
+      useHeadWasher: $("useHeadWasher").value,
+      tHeadWasher: $("tHeadWasher").value,
+      odHeadWasher: $("odHeadWasher").value,
+      matHeadWasher: $("matHeadWasher").value,
+      
+      numMembers: $("numMembers").value,
+      members: [],
+      
+      useNutWasher: $("useNutWasher").value,
+      tNutWasher: $("tNutWasher").value,
+      odNutWasher: $("odNutWasher").value,
+      matNutWasher: $("matNutWasher").value,
+      
+      Lshank: $("Lshank").value
+    },
+    loads: {
+      P: $("Pext").value,
+      T: $("Ttarget").value,
+      torqueAt: $("torqueAt").value,
+      Ttol: $("Ttol").value,
+      muTmin: $("muTmin").value,
+      muTmax: $("muTmax").value,
+      muBmin: $("muBmin").value,
+      muBmax: $("muBmax").value,
+      holeFit: $("holeFit").value,
+      holeDia: $("holeDia").value,
+      proofLimit: $("proofLimit").value
+    }
+  };
+  
+  // Capture member data
+  const nMembers = Number($("numMembers").value);
+  for(let i = 1; i <= nMembers; i++) {
+    exportData.geometry.members.push({
+      t: $("m_t_" + i).value,
+      mat: $("m_mat_" + i).value,
+      extra: $("m_extra_" + i).value
+    });
+  }
+  
+  // Create and download JSON file
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bolted-joint-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  setStatus("JSON exported", "ok");
+}
+
+function importStateFromJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        
+        // Restore units
+        $("isImperial").checked = data.units.isImperial;
+        
+        // Trigger rebuild of family/grade/size dropdowns
+        rebuildBoltFamilyOptions();
+        
+        // Restore bolt settings
+        $("boltFamily").value = data.bolt.family;
+        rebuildGradeOptions();
+        
+        $("threadSeries").value = data.bolt.threadSeries;
+        rebuildSizeOptions();
+        
+        $("boltGrade").value = data.bolt.grade;
+        $("boltSize").value = data.bolt.size;
+        $("boltE").value = data.bolt.boltE;
+        $("etaThread").value = data.bolt.etaThread;
+        $("frustumAngle").value = data.bolt.frustumAngle;
+        
+        // Restore geometry
+        $("useHeadWasher").value = data.geometry.useHeadWasher;
+        $("tHeadWasher").value = data.geometry.tHeadWasher;
+        $("odHeadWasher").value = data.geometry.odHeadWasher;
+        $("matHeadWasher").value = data.geometry.matHeadWasher;
+        
+        $("numMembers").value = data.geometry.numMembers;
+        buildMemberRows();
+        
+        // Restore member data
+        data.geometry.members.forEach((m, i) => {
+          const idx = i + 1;
+          $("m_t_" + idx).value = m.t;
+          $("m_mat_" + idx).value = m.mat;
+          $("m_extra_" + idx).value = m.extra;
+        });
+        
+        $("useNutWasher").value = data.geometry.useNutWasher;
+        $("tNutWasher").value = data.geometry.tNutWasher;
+        $("odNutWasher").value = data.geometry.odNutWasher;
+        $("matNutWasher").value = data.geometry.matNutWasher;
+        $("Lshank").value = data.geometry.Lshank;
+        
+        // Restore loads
+        $("Pext").value = data.loads.P;
+        $("Ttarget").value = data.loads.T;
+        $("torqueAt").value = data.loads.torqueAt;
+        $("Ttol").value = data.loads.Ttol;
+        $("muTmin").value = data.loads.muTmin;
+        $("muTmax").value = data.loads.muTmax;
+        $("muBmin").value = data.loads.muBmin;
+        $("muBmax").value = data.loads.muBmax;
+        $("holeFit").value = data.loads.holeFit;
+        $("holeDia").value = data.loads.holeDia;
+        $("proofLimit").value = data.loads.proofLimit;
+        
+        recalcAndDraw(true);
+        setStatus("JSON imported", "ok");
+        
+      } catch (err) {
+        setStatus("Import failed: " + err.message, "err");
+        console.error("Import error:", err);
+      }
     };
-    downloadText("frame_modal_model.json", JSON.stringify(payload, null, 2), "application/json");
-    logLine("OK: Exported JSON.", "log-ok");
-  }catch(e){
-    logLine(`ERROR: Export JSON failed: ${e.message}`, "log-err");
-  }
-});
-
-el.btnExportCSV.addEventListener("click", ()=>{
-  logClear();
-  try{
-    const state = snapshotFromTextareas();
-    const csv = stateToCSV(state);
-    downloadText("frame_modal_model.csv", csv, "text/csv");
-    logLine("OK: Exported CSV.", "log-ok");
-  }catch(e){
-    logLine(`ERROR: Export CSV failed: ${e.message}`, "log-err");
-  }
-});
-
-el.btnImportJSON.addEventListener("click", ()=>{
-  el.fileImportJSON.value = "";
-  el.fileImportJSON.click();
-});
-
-el.fileImportJSON.addEventListener("change", ()=>{
-  const f = el.fileImportJSON.files && el.fileImportJSON.files[0];
-  if(!f) return;
-
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    logClear();
-    try{
-      const obj = JSON.parse(String(reader.result||"{}"));
-
-      // Minimal validation
-      if(!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.elems)){
-        throw new Error("JSON must contain arrays: nodes, elems.");
-      }
-
-      // Set units/g if present
-      if(obj.units === "metric" || obj.units === "imperial"){
-        el.units.value = obj.units;
-      }
-      if(Number.isFinite(Number(obj.g)) && Number(obj.g) > 0){
-        el.gInput.value = Number(obj.g);
-      }
-
-      // Populate textareas (TSV with header)
-      el.taNodes.value = nodesToTSV(obj.nodes);
-      el.taElems.value = elemsToTSV(obj.elems);
-
-      // Reinstall model + refresh buttons/summary
-      syncFromTextareas();
-
-      // Keep view interactive state as-is; but redraw if already drawn
-      if(Model.isDrawn) requestRedraw();
-
-      logLine("OK: Imported JSON into Nodes/Segments.", "log-ok");
-      setStatus("Idle");
-    }catch(e){
-      logLine(`ERROR: Import JSON failed: ${e.message}`, "log-err");
-      setStatus("Import failed");
-    }
+    reader.readAsText(file);
   };
-  reader.readAsText(f);
-});
-
-
-/* =========================
-   Animation
-   ========================= */
-let animOn=false;
-let t0=null;
-
-function drawSelectedModeAnimated(timeMs){
-  if(!Model.isDrawn) { animOn=false; return; }
-  if(!Model.lastModes) { animOn=false; return; }
-
-  const idx = Number(el.modeSelect.value||0);
-  const U = Model.lastModes.modes[idx];
-  const f = Model.lastModes.freqHz[idx] || 1;
-  const amp = Number(el.amp.value)||10;
-  const speed = Number(el.speed.value)||1;
-
-  if(t0==null) t0=timeMs;
-  const dt = (timeMs - t0)/1000;
-  const phase = 2*Math.PI*(f*speed)*dt;
-  const s = amp*Math.sin(phase);
-
-  drawPrimary({U, scale:s});
-
-  if(animOn) requestAnimationFrame(drawSelectedModeAnimated);
+  
+  input.click();
 }
 
-el.btnToggleAnim.addEventListener('click', ()=>{
-  if(!Model.lastModes) return;
-  animOn = !animOn;
-  el.btnToggleAnim.textContent = `Animate: ${animOn ? "On" : "Off"}`;
-  t0 = null;
-  if(animOn) requestAnimationFrame(drawSelectedModeAnimated);
-  else requestRedraw();
-});
-
-el.modeSelect.addEventListener('change', ()=>{
-  if(!Model.lastModes) return;
-  if(!animOn) requestRedraw();
-  // if animOn, next frame uses new mode automatically
-});
-el.amp.addEventListener('input', ()=>{
-  if(!Model.lastModes) return;
-  if(!animOn) requestRedraw();
-});
-el.speed.addEventListener('input', ()=>{ /* picked up next frame */ });
-
-/* =========================
-   Picking (hover + click pin)
-   ========================= */
-function canvasPointFromEvent(evt){
-  const r = el.canvas.getBoundingClientRect();
-  return { x:(evt.clientX-r.left)*(el.canvas.width/r.width), y:(evt.clientY-r.top)*(el.canvas.height/r.height) };
-}
-function findNodeAtScreenPoint(sx, sy, tol=10){
-  for(const n of Model.nodes){
-    const p=project3D(n.x,n.y,n.z);
-    if(Math.hypot(p.x-sx,p.y-sy)<=tol) return n;
-  }
-  return null;
-}
-function findElemAtScreenPoint(sx, sy, tol=8){
-  for(const e of Model.elems){
-    const ni=Model.nodeById.get(e.ni), nj=Model.nodeById.get(e.nj);
-    if(!ni||!nj) continue;
-    const p1=project3D(ni.x,ni.y,ni.z), p2=project3D(nj.x,nj.y,nj.z);
-    const dx=p2.x-p1.x, dy=p2.y-p1.y;
-    const len2=dx*dx+dy*dy;
-    if(len2<1e-9) continue;
-    let t=((sx-p1.x)*dx+(sy-p1.y)*dy)/len2;
-    t=Math.max(0,Math.min(1,t));
-    const cx=p1.x+t*dx, cy=p1.y+t*dy;
-    if(Math.hypot(sx-cx,sy-cy)<=tol) return e;
-  }
-  return null;
-}
-function formatNodeTooltip(n){
-  const ux = n.ux.prescribed ? `Ux=${n.ux.value}` : "Ux=free";
-  const uy = n.uy.prescribed ? `Uy=${n.uy.value}` : "Uy=free";
-  const uz = n.uz.prescribed ? `Uz=${n.uz.value}` : "Uz=free";
-  const rx = n.rx.prescribed ? `Rx=${n.rx.value}` : "Rx=free";
-  const ry = n.ry.prescribed ? `Ry=${n.ry.value}` : "Ry=free";
-  const rz = n.rz.prescribed ? `Rz=${n.rz.value}` : "Rz=free";
-  return `Node ${n.id}: ${ux}, ${uy}, ${uz}, ${rx}, ${ry}, ${rz} | W=${n.W}`;
-}
-function formatElemTooltip(e){
-  return `Seg ${e.id}: ${e.ni}→${e.nj} | E=${e.E.toExponential(2)} G=${e.G.toExponential(2)} | A=${e.Ayz} rho=${e.rho}`;
-}
-
-el.canvas.addEventListener('mousemove', (evt)=>{
-  const p = canvasPointFromEvent(evt);
-  View.mousePos = p;
-
-  if(View.isInteractive && Model.isDrawn){
-    const n = findNodeAtScreenPoint(p.x,p.y);
-    const e = n ? null : findElemAtScreenPoint(p.x,p.y);
-
-    const prevHN = View.hoveredNode, prevHE = View.hoveredElem;
-    View.hoveredNode = n ? n.id : null;
-    View.hoveredElem = e ? e.id : null;
-
-    // show hover tooltip only if nothing pinned
-    if(View.pinnedNode==null && View.pinnedElem==null){
-      if(n) el.selInfo.textContent = formatNodeTooltip(n);
-      else if(e) el.selInfo.textContent = formatElemTooltip(e);
-      else el.selInfo.textContent = "";
-    }
-
-    // redraw only if hover target changed (and not animating)
-    if(!animOn && (prevHN!==View.hoveredNode || prevHE!==View.hoveredElem)){
-      requestRedraw();
-    }
-  }
-
-  // camera interaction handled elsewhere
-});
-
-el.canvas.addEventListener('click', (evt)=>{
-  if(!View.isInteractive || !Model.isDrawn) return;
-  // Don't treat click as selection if it was a drag
-  if(View._dragMoved) return;
-
-  const p = canvasPointFromEvent(evt);
-  const n = findNodeAtScreenPoint(p.x,p.y,10);
-  if(n){
-    View.pinnedNode = n.id;
-    View.pinnedElem = null;
-    showNodeInfo(n);
-    requestRedraw();
+function exportSummaryAsCSV() {
+  const state = readState();
+  const ev = evaluateCurrentBolt(state);
+  
+  if (!ev.geom) {
+    setStatus("No data to export", "err");
     return;
   }
-  const e = findElemAtScreenPoint(p.x,p.y,8);
-  if(e){
-    View.pinnedElem = e.id;
-    View.pinnedNode = null;
-    showElemInfo(e);
-    requestRedraw();
-    return;
-  }
+  
+  const u = state.u;
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 19).replace('T', ' ');
+  
+  // Build CSV content
+  let csv = "Bolted Joint Analysis Summary\n";
+  csv += `Export Date/Time,${dateStr}\n`;
+  csv += `\n`;
+  
+  // Configuration section
+  csv += "CONFIGURATION\n";
+  csv += `Units,${state.units === "imperial" ? "Imperial" : "Metric"}\n`;
+  csv += `Bolt Family,${$("boltFamily").value}\n`;
+  csv += `Thread Series,${$("threadSeries").value}\n`;
+  csv += `Grade,${$("boltGrade").value}\n`;
+  csv += `Bolt Size,${state.bolt.data?.label || "—"}\n`;
+  csv += `\n`;
+  
+  // Input parameters
+  csv += "INPUT PARAMETERS\n";
+  csv += `External Load P,${state.loads.P},${u.F}\n`;
+  csv += `Target Torque T,${state.loads.T},${u.T}\n`;
+  csv += `Torque Tolerance,${(state.loads.TtolPct * 100).toFixed(1)},%\n`;
+  csv += `Grip Length Lg,${fmt(ev.geom.Lg)},${u.L}\n`;
+  csv += `Shank Length in Grip,${fmt(ev.geom.Lsh)},${u.L}\n`;
+  csv += `Thread Length in Grip,${fmt(ev.geom.Lth)},${u.L}\n`;
+  csv += `\n`;
+  
+  // Results section
+  csv += "ANALYSIS RESULTS\n";
+  csv += `Quantity,Value,Units\n`;
+  csv += `Clearance Hole Diameter,${fmt(ev.geom.dh)},${u.L}\n`;
+  csv += `Hole Fit,${state.loads.holeFit}\n`;
+  csv += `Torque Applied At,${state.loads.torqueAt}\n`;
+  csv += `Effective Bearing Diameter,${fmt(ev.preload?.Db_eff)},${u.L}\n`;
+  csv += `Shank Area,${fmt(ev.kbOut?.A_shank)},${u.L}²\n`;
+  csv += `Tensile Stress Area,${fmt(ev.kbOut?.At)},${u.L}²\n`;
+  csv += `Thread Compliance Factor,${fmt(ev.kbOut?.eta, 3)}\n`;
+  csv += `Effective Thread Area,${fmt(ev.kbOut?.At_eff)},${u.L}²\n`;
+  csv += `Bolt Stiffness kb,${fmt(ev.kbOut?.kb)},${u.F}/${u.L}\n`;
+  csv += `Member Stiffness km,${fmt(ev.kmOut?.km)},${u.F}/${u.L}\n`;
+  csv += `Load Fraction C,${fmt(ev.C, 5)}\n`;
+  csv += `Torque Min,${fmt(ev.preload?.Tmin)},${u.T}\n`;
+  csv += `Torque Max,${fmt(ev.preload?.Tmax)},${u.T}\n`;
+  csv += `Preload Min,${fmt(ev.preload?.Fmin)},${u.F}\n`;
+  csv += `Preload Max,${fmt(ev.preload?.Fmax)},${u.F}\n`;
+  csv += `Separation Requirement,${fmt(ev.sepReq)},${u.F}\n`;
+  csv += `Separation Margin,${fmt(ev.sepMargin)},${u.F}\n`;
+  csv += `Proof Load,${fmt(ev.Fproof)},${u.F}\n`;
+  csv += `Max Bolt Load,${fmt(ev.FbMax)},${u.F}\n`;
+  csv += `Proof Margin,${fmt(ev.proofMargin)},${u.F}\n`;
+  csv += `\n`;
+  
+  // Status
+  let status = "OK";
+  if (ev.sepMargin != null && ev.sepMargin < 0) status = "FAIL - Separation";
+  else if (ev.proofMargin != null && ev.proofMargin < 0) status = "FAIL - Over Proof";
+  else if (ev.sepMargin != null && ev.sepMargin < 0.05 * Math.max(1, ev.sepReq || 1)) status = "WARNING - Low Separation Margin";
+  
+  csv += `Overall Status,${status}\n`;
+  
+  // Create and download CSV file
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bolted-joint-summary-${now.toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  setStatus("CSV exported", "ok");
+}
 
-  // click empty space clears pin
-  View.pinnedNode = null;
-  View.pinnedElem = null;
-  el.selInfo.textContent = "";
-  requestRedraw();
-});
 
-/* =========================
-   Camera controls (orbit/pan/zoom)
-   ========================= */
-el.canvas.addEventListener('mousedown', (evt)=>{
-  if(!View.isInteractive) return;
-  View.dragging=true;
-  View._dragMoved=false;
-  View.dragButton=evt.button;
-  View.dragStart = {
-    x:evt.clientX, y:evt.clientY,
-    azimuth:View.cam.azimuth, elevation:View.cam.elevation,
-    centerX:View.cam.centerX, centerY:View.cam.centerY, centerZ:View.cam.centerZ
-  };
-});
-window.addEventListener('mouseup', ()=>{ View.dragging=false; });
-window.addEventListener('mousemove', (evt)=>{
-  if(!View.dragging) return;
 
-  const dx = evt.clientX - View.dragStart.x;
-  const dy = evt.clientY - View.dragStart.y;
-  if(Math.hypot(dx,dy) > 2) View._dragMoved=true;
+function bindEvents(){
+  $("isImperial").addEventListener("change", ()=>{
+    rebuildBoltFamilyOptions();
+    rebuildGradeOptions();
+    rebuildSizeOptions();
+    updateBoltEDefault();
 
-  if(View.dragButton===0){
-    View.cam.azimuth = View.dragStart.azimuth + dx*0.01;
-    View.cam.elevation = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, View.dragStart.elevation - dy*0.01));
-  }else if(View.dragButton===2){
-    View.cam.centerX = View.dragStart.centerX - dx*0.05;
-    View.cam.centerY = View.dragStart.centerY + dy*0.05;
-  }
+    if($("isImperial").checked){
+      $("tHeadWasher").value = "0.06";
+      $("odHeadWasher").value = "1.00";
+      $("tNutWasher").value = "0.06";
+      $("odNutWasher").value = "1.00";
+      $("Lshank").value = "0.75";
+      $("Pext").value = "2000";
+      $("Ttarget").value = "120";
+    } else {
+      $("tHeadWasher").value = "1.5";
+      $("odHeadWasher").value = "24";
+      $("tNutWasher").value = "1.5";
+      $("odNutWasher").value = "24";
+      $("Lshank").value = "20";
+      $("Pext").value = "9000";
+      $("Ttarget").value = "14000";
+    }
 
-  if(!animOn) requestRedraw();
-});
-el.canvas.addEventListener('contextmenu', (e)=>e.preventDefault());
-el.canvas.addEventListener('wheel', (evt)=>{
-  if(!View.isInteractive) return;
-  evt.preventDefault();
-  const s = Math.exp(evt.deltaY*0.001);
-  View.cam.distance = Math.max(5, Math.min(5000, View.cam.distance*s));
-  if(!animOn) requestRedraw();
-}, {passive:false});
+    recalcAndDraw(false);
+  });
 
-/* =========================
+  $("boltFamily").addEventListener("change", ()=>{
+    rebuildGradeOptions();
+    rebuildSizeOptions();
+    updateBoltEDefault();
+    recalcAndDraw(false);
+  });
+
+  $("threadSeries").addEventListener("change", ()=>{
+    rebuildSizeOptions();
+    recalcAndDraw(false);
+  });
+
+  $("boltGrade").addEventListener("change", ()=>recalcAndDraw(false));
+  $("boltSize").addEventListener("change", ()=>recalcAndDraw(false));
+
+  [
+    "useHeadWasher","tHeadWasher","odHeadWasher","matHeadWasher",
+    "useNutWasher","tNutWasher","odNutWasher","matNutWasher",
+    "Lshank","frustumAngle","boltE","etaThread"
+  ].forEach(id=>{
+    $(id).addEventListener("input", ()=>recalcAndDraw(false));
+    $(id).addEventListener("change", ()=>recalcAndDraw(false));
+  });
+
+  $("numMembers").addEventListener("change", ()=>{
+    buildMemberRows();
+    recalcAndDraw(false);
+  });
+
+  ["Pext","Ttarget","torqueAt","Ttol","muTmin","muTmax","muBmin","muBmax","holeFit","holeDia","proofLimit"]
+    .forEach(id=>{
+      $(id).addEventListener("input", ()=>recalcAndDraw(false));
+      $(id).addEventListener("change", ()=>recalcAndDraw(false));
+    });
+
+  $("btnSolve").addEventListener("click", runSolveForCurrentSelection);
+  $("btnRedraw").addEventListener("click", ()=>recalcAndDraw(false));
+  $("btnReset").addEventListener("click", resetDefaults);
+
+  $("btnScan").addEventListener("click", runSizeScan);
+
+
+$("btnExportJSON").addEventListener("click", exportStateAsJSON);
+  $("btnImportJSON").addEventListener("click", importStateFromJSON);
+  $("btnExportCSV").addEventListener("click", exportSummaryAsCSV);
+
+
+
+}
+
+/* ============================================================
    Init
-   ========================= */
-el.taNodes.value = DEFAULT_NODES_TEXT;
-el.taElems.value = DEFAULT_ELEMS_TEXT;
-try{ syncFromTextareas(); } catch(_){}
-renderSummary();
-updateButtons();
+   ============================================================ */
+(function init(){
+  buildMaterialsSelect($("matHeadWasher"));
+  buildMaterialsSelect($("matNutWasher"));
+  $("matHeadWasher").value = "steel";
+  $("matNutWasher").value = "steel";
+
+  rebuildBoltFamilyOptions();
+  rebuildGradeOptions();
+  rebuildSizeOptions();
+  updateBoltEDefault();
+
+  buildMemberRows();
+  bindEvents();
+  resetDefaults();
+})();
+
+function evaluateCurrentBolt(state){
+  const geom = deriveGeometry(state);
+  if(!geom || !state.bolt.data) return { ok:false, reason:"No bolt/geometry" };
+
+  const kbOut = calcBoltStiffness(state, geom);
+  const kmOut = calcMemberStiffnessShigley(state, geom);
+  const C = (kbOut.kb + kmOut.km) > 0 ? kbOut.kb/(kbOut.kb + kmOut.km) : null;
+
+  const preload = calcPreloadBoundsThreadBearing(state, geom);
+  const Fproof = calcProofLoad(state);
+
+  const P = state.loads.P;
+  const sepReq = (C!=null) ? (1-C)*P : null;
+  const sepMargin = (preload?.Fmin!=null && sepReq!=null) ? (preload.Fmin - sepReq) : null;
+
+  const FbMax = (preload?.Fmax!=null && C!=null) ? (preload.Fmax + C*P) : null;
+  const proofMargin = (Fproof!=null && FbMax!=null) ? (state.loads.proofLimit*Fproof - FbMax) : null;
+
+  const okSep = (sepMargin==null) ? false : (sepMargin >= 0);
+  const okProof = (proofMargin==null) ? false : (proofMargin >= 0);
+  const ok = okSep && okProof;
+
+  return { ok, geom, kbOut, kmOut, C, preload, Fproof, sepReq, sepMargin, FbMax, proofMargin };
+}
+
+function runSizeScan(){
+  const base = readState();
+  const family = base.bolt.family;
+  const series = base.bolt.series;
+
+  const list = (BOLTS[family] && BOLTS[family][series]) ? BOLTS[family][series] : [];
+  if(!list.length){
+    setStatus("No sizes to scan", "err");
+    return;
+  }
+
+  const holeOverride = base.loads.holeDiaOverride;
+
+  let bestIdx = null;
+  let bestBand = null;
+
+  for(let idx=0; idx<list.length; idx++){
+    const state = JSON.parse(JSON.stringify(base));
+    state.bolt.sizeIdx = idx;
+    state.bolt.data = list[idx];
+    state.loads.holeDiaOverride = holeOverride;
+
+    const geom = deriveGeometry(state);
+    if(!geom) continue;
+
+    const band = torqueBandForState(state, geom);
+    if(band.feasible){
+      bestIdx = idx;
+      bestBand = band;
+      break;
+    }
+  }
+
+  if(bestIdx === null){
+    setStatus("No passing size (scan)", "err");
+    return;
+  }
+
+  $("boltSize").value = String(bestIdx);
+  updateRightPills();
+
+  if(bestBand?.Tset != null){
+    $("Ttarget").value = String(bestBand.Tset);
+  }
+
+  runSolveForCurrentSelection();
+  setStatus(`Scan OK → ${list[bestIdx].label}`, "ok");
+}
 </script>
+</body>
+</html>
+
 
 
 
