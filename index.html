@@ -1624,38 +1624,47 @@ function importStateFromJSON() {
         $("odHeadWasher").value = data.geometry.odHeadWasher;
         $("matHeadWasher").value = data.geometry.matHeadWasher;
         
+        // Set number of members FIRST
         $("numMembers").value = data.geometry.numMembers;
+        // THEN build the member rows (creates the DOM elements)
         buildMemberRows();
         
-        // Restore member data
-        data.geometry.members.forEach((m, i) => {
-          const idx = i + 1;
-          $("m_t_" + idx).value = m.t;
-          $("m_mat_" + idx).value = m.mat;
-          $("m_extra_" + idx).value = m.extra;
-        });
-        
-        $("useNutWasher").value = data.geometry.useNutWasher;
-        $("tNutWasher").value = data.geometry.tNutWasher;
-        $("odNutWasher").value = data.geometry.odNutWasher;
-        $("matNutWasher").value = data.geometry.matNutWasher;
-        $("Lshank").value = data.geometry.Lshank;
-        
-        // Restore loads
-        $("Pext").value = data.loads.P;
-        $("Ttarget").value = data.loads.T;
-        $("torqueAt").value = data.loads.torqueAt;
-        $("Ttol").value = data.loads.Ttol;
-        $("muTmin").value = data.loads.muTmin;
-        $("muTmax").value = data.loads.muTmax;
-        $("muBmin").value = data.loads.muBmin;
-        $("muBmax").value = data.loads.muBmax;
-        $("holeFit").value = data.loads.holeFit;
-        $("holeDia").value = data.loads.holeDia;
-        $("proofLimit").value = data.loads.proofLimit;
-        
-        recalcAndDraw(true);
-        setStatus("JSON imported", "ok");
+        // NOW restore member data (after elements exist)
+        // Use setTimeout to ensure DOM is fully updated
+        setTimeout(() => {
+          data.geometry.members.forEach((m, i) => {
+            const idx = i + 1;
+            const tElem = $("m_t_" + idx);
+            const matElem = $("m_mat_" + idx);
+            const extraElem = $("m_extra_" + idx);
+            
+            if (tElem) tElem.value = m.t;
+            if (matElem) matElem.value = m.mat;
+            if (extraElem) extraElem.value = m.extra;
+          });
+          
+          $("useNutWasher").value = data.geometry.useNutWasher;
+          $("tNutWasher").value = data.geometry.tNutWasher;
+          $("odNutWasher").value = data.geometry.odNutWasher;
+          $("matNutWasher").value = data.geometry.matNutWasher;
+          $("Lshank").value = data.geometry.Lshank;
+          
+          // Restore loads
+          $("Pext").value = data.loads.P;
+          $("Ttarget").value = data.loads.T;
+          $("torqueAt").value = data.loads.torqueAt;
+          $("Ttol").value = data.loads.Ttol;
+          $("muTmin").value = data.loads.muTmin;
+          $("muTmax").value = data.loads.muTmax;
+          $("muBmin").value = data.loads.muBmin;
+          $("muBmax").value = data.loads.muBmax;
+          $("holeFit").value = data.loads.holeFit;
+          $("holeDia").value = data.loads.holeDia;
+          $("proofLimit").value = data.loads.proofLimit;
+          
+          recalcAndDraw(true);
+          setStatus("JSON imported", "ok");
+        }, 10);
         
       } catch (err) {
         setStatus("Import failed: " + err.message, "err");
@@ -1667,6 +1676,7 @@ function importStateFromJSON() {
   
   input.click();
 }
+
 
 function exportSummaryAsCSV() {
   const state = readState();
@@ -1925,6 +1935,7 @@ function runSizeScan(){
 </script>
 </body>
 </html>
+
 
 
 
